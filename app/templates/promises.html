@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Promises — {{ company_name }}{% endblock %}
+{% block heading %}Promises to pay{% endblock %}
+{% block subheading %}<p class="sub">What customers have committed to, and what needs a follow-up today.</p>{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+<section class="kpi-row promise-kpis" aria-label="Promise figures">
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-red">{{ m.icon('clock', 18) }}</span><span class="kpi-label">Due or overdue</span></div><div class="kpi-value">{{ stats.due }}</div><div class="kpi-foot"><span class="delta flat">{% if stats.amount_due %}UGX {{ '{:,}'.format(stats.amount_due) }} promised{% else %}Follow up today{% endif %}</span></div></div>
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-blue">{{ m.icon('calendar-check', 18) }}</span><span class="kpi-label">Upcoming</span></div><div class="kpi-value">{{ stats.upcoming }}</div><div class="kpi-foot"><span class="delta flat">Still to come</span></div></div>
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-teal">{{ m.icon('check-circle', 18) }}</span><span class="kpi-label">Kept (30 days)</span></div><div class="kpi-value">{{ (stats.kept_rate ~ '%') if stats.kept_rate is not none else '—' }}</div><div class="kpi-foot"><span class="delta flat">Kept ÷ (kept + broken)</span></div></div>
+</section>
+<nav class="tabs" aria-label="Promise filters">
+  {% for key, label in [('due','Due now'),('upcoming','Upcoming'),('kept','Kept'),('broken','Broken'),('all','All')] %}<a class="{{ 'active' if tab==key else '' }}" href="{{ url_for('main.promises', tab=key, scope=scope) }}">{{ label }}</a>{% endfor %}
+  {% if current_user.is_manager() %}<a class="scope-toggle" href="{{ url_for('main.promises', tab=tab, scope='mine' if scope=='all' else 'all') }}">{{ 'Show only mine' if scope=='all' else 'Show whole team' }}</a>{% endif %}
+</nav>
+<section class="panel">
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Promised for</th><th scope="col">Customer</th><th scope="col">Amount</th><th scope="col">Ticket</th><th scope="col">Owner</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>{% for p in rows %}<tr>
+      <td class="{{ 'overdue' if p.status=='Pending' and p.promised_date < today else '' }}">{{ p.promised_date.strftime('%a %d %b') }}{% if p.status=='Pending' and p.promised_date < today %}<small>{{ (today - p.promised_date).days }} day{{ '' if (today - p.promised_date).days==1 else 's' }} late</small>{% elif p.status=='Pending' and p.promised_date == today %}<small>today</small>{% endif %}</td>
+      <td><a class="strong" href="{{ url_for('main.customer_detail', customer_id=p.customer_id) }}">{{ p.customer.first_name }} {{ p.customer.last_name }}</a>{% if p.note %}<small>{{ p.note|truncate(60) }}</small>{% endif %}</td>
+      <td>{% if p.amount %}UGX {{ '{:,}'.format(p.amount) }}{% else %}—{% endif %}</td>
+      <td>{% if p.ticket %}<a href="{{ url_for('main.ticket_detail', ticket_id=p.ticket_id) }}">{{ p.ticket.ticket_number }}</a>{% else %}—{% endif %}</td>
+      <td>{{ p.owner.name }}</td>
+      <td><span class="pill promise-{{ p.status|lower }}">{{ p.status }}</span></td>
+      <td>{% if p.status=='Pending' and (p.user_id==current_user.id or current_user.is_manager()) %}<div class="inline-actions">
+        <form method="post" action="{{ url_for('main.promise_action', pid=p.id, action='kept') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}"><button class="secondary">Kept</button></form>
+        <form method="post" action="{{ url_for('main.promise_action', pid=p.id, action='broken') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}"><button class="secondary">Broken</button></form></div>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="7">{{ m.empty('calendar-check', 'No promises here', 'Record a promise to pay from a ticket or a customer page and it will be tracked until it is kept or broken.') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

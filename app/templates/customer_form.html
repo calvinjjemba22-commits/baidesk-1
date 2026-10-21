@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Edit customer' if customer else 'New customer' }} — {{ company_name }}{% endblock %}
+{% block heading %}{{ 'Edit customer' if customer else 'New customer' }}{% endblock %}
+{% block content %}
+<form method="post" class="panel form-panel">{{ csrf_field() }}
+  <div class="panel-head"><div><h3>{{ 'Edit ' ~ customer.customer_number if customer else 'Create customer profile' }}</h3><p>Duplicate checks run against phone numbers and email addresses.</p></div></div>
+  {% if duplicates %}
+  <div class="notice error"><b>Existing customers that match:</b>
+    {% for d in duplicates %}<div><a href="{{ url_for('main.customer_detail', customer_id=d.id) }}">{{ d.first_name }} {{ d.last_name }} · {{ d.customer_number }}</a></div>{% endfor %}
+  </div>
+  {% endif %}
+  <div class="form-grid">
+    <label>First name *<input name="first_name" value="{{ form.get('first_name','') }}" required></label>
+    <label>Last name<input name="last_name" value="{{ form.get('last_name','') }}"></label>
+    <label>Phone<input name="phone" value="{{ form.get('phone','') }}" placeholder="0770 000 000"></label>
+    <label>Email<input name="email" type="email" value="{{ form.get('email','') }}"></label>
+    <label>Company<input name="company" value="{{ form.get('company','') }}"></label>
+    <label>Location<input name="location" value="{{ form.get('location','') }}" placeholder="Kampala"></label>
+    {% if customer %}
+    <label>Status<select name="status"><option {% if form.get('status','Active')=='Active' %}selected{% endif %}>Active</option><option {% if form.get('status')=='Inactive' %}selected{% endif %}>Inactive</option></select></label>
+    <label>Other phone numbers (one per line)<textarea name="extra_phones" rows="3">{{ form.get('extra_phones','') }}</textarea></label>
+    {% endif %}
+    <label class="full-field">Notes<textarea name="notes">{{ form.get('notes','') }}</textarea></label>
+  </div>
+  <div class="actions"><a class="secondary" href="{{ url_for('main.customer_detail', customer_id=customer.id) if customer else url_for('main.customers') }}">Cancel</a><button class="primary">{{ 'Save changes' if customer else 'Create customer' }}</button></div>
+</form>
+{% endblock %}

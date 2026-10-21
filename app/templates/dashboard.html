@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% block title %}Overview — {{ company_name }}{% endblock %}
+{% block heading %}{{ greeting }}, {{ current_user.name.split()[0] }}{% endblock %}
+{% block subheading %}<p class="sub">Here’s what’s happening across your support operation today.</p><span class="live-chip" id="liveChip" hidden><i></i><span>Live · updated <b id="liveAgo">just now</b></span></span>{% endblock %}
+{% block actions %}{% import '_macros.html' as m with context %}<a class="primary" href="{{ url_for('main.ticket_new') }}">{{ m.icon('plus', 16) }} Create ticket</a>{% endblock %}
+
+{% block content %}
+{% import '_macros.html' as m with context %}
+{% set cards = [
+  ('Open tickets',    'ticket',       'blue',  kpis.open,           url_for('main.tickets', view='open')),
+  ('Overdue',         'clock',        'amber', kpis.overdue,        url_for('main.tickets', view='overdue')),
+  ('First response',  'zap',          'teal',  kpis.first_response, none),
+  ('SLA compliance',  'shield',       'teal',  kpis.sla,            none),
+  ('Resolved today',  'check-circle', 'blue',  kpis.resolved,       url_for('main.tickets', view='resolved_today')),
+] %}
+
+<section class="kpi-row" aria-label="Key figures">
+  {% for label, icon, tone, k, href in cards %}
+  <{{ 'a' if href else 'div' }} class="kpi-card" {% if href %}href="{{ href }}"{% endif %}>
+    <div class="kpi-top"><span class="chip chip-{{ tone }}">{{ m.icon(icon, 18) }}</span><span class="kpi-label">{{ label }}</span></div>
+    <div class="kpi-value{{ ' long' if k.value is string and k.value|length > 5 else '' }}">{{ k.value }}</div>
+    <div class="kpi-foot">
+      <span class="delta {{ k.delta.tone }} {{ k.delta.dir }}">{% if k.delta.dir == 'up' %}{{ m.icon('arrow-up', 13) }}{% elif k.delta.dir == 'down' %}{{ m.icon('arrow-down', 13) }}{% else %}{{ m.icon('minus', 13) }}{% endif %}{{ k.delta.text }}</span>
+    </div>
+    <svg class="spark spark-{{ tone }}" viewBox="0 0 120 34" preserveAspectRatio="none" role="img" aria-label="{{ label }}, last 7 days" data-spark='{{ k.spark|tojson }}'></svg>
+  </{{ 'a' if href else 'div' }}>
+  {% endfor %}
+</section>
+
+<div class="dash-row dash-row-main">
+  <section class="panel" aria-labelledby="volTitle">
+    <div class="panel-head">
+      <div><h3 id="volTitle">Ticket volume</h3><p>New vs resolved tickets (last 7 days)</p></div>
+      <div class="legend"><span><i class="dot a"></i>New</span><span><i class="dot b"></i>Resolved</span></div>
+    </div>
+    <div id="volumeChart" class="line-chart" data-chart='{{ volume|tojson }}'></div>
+  </section>
+
+  <section class="panel sla-panel" aria-labelledby="slaTitle">
+    <div class="panel-head"><div><h3 id="slaTitle">SLA health</h3><p>Tickets within SLA target</p></div></div>
+    {% set C = 339.292 %}
+    {% set tot = sla.total or 1 %}
+    {% set on_len = (C if not sla.total else C * sla.on_track / tot) %}
+    {% set risk_len = C * sla.at_risk / tot %}
+    {% set late_len = C * sla.breached / tot %}
+    <div class="sla-wrap">
+      <div class="donut" role="img" aria-label="{{ sla.compliance|round(1) }} percent of open tickets are within SLA">
+        <svg viewBox="0 0 140 140" width="150" height="150">
+          <circle cx="70" cy="70" r="54" class="ring-bg"/>
+          <g transform="rotate(-90 70 70)" fill="none" stroke-width="13">
+            <circle cx="70" cy="70" r="54" class="seg-ok"   stroke-dasharray="{{ on_len }} {{ C }}" stroke-dashoffset="0"/>
+            <circle cx="70" cy="70" r="54" class="seg-risk" stroke-dasharray="{{ risk_len }} {{ C }}" stroke-dashoffset="-{{ on_len }}"/>
+            <circle cx="70" cy="70" r="54" class="seg-late" stroke-dasharray="{{ late_len }} {{ C }}" stroke-dashoffset="-{{ on_len + risk_len }}"/>
+          </g>
+        </svg>
+        <div class="donut-label"><b>{{ '%g'|format(sla.compliance) }}%</b><span>In SLA</span></div>
+      </div>
+      <dl class="sla-legend">
+        <div><dt><i class="dot ok"></i>On track</dt><dd>{{ sla.on_track }}</dd><dd class="pct">{{ ((sla.on_track / tot * 100)|round(1)) if sla.total else 0 }}%</dd></div>
+        <div><dt><i class="dot risk"></i>At risk</dt><dd>{{ sla.at_risk }}</dd><dd class="pct">{{ ((sla.at_risk / tot * 100)|round(1)) if sla.total else 0 }}%</dd></div>
+        <div><dt><i class="dot late"></i>Breached</dt><dd>{{ sla.breached }}</dd><dd class="pct">{{ ((sla.breached / tot * 100)|round(1)) if sla.total else 0 }}%</dd></div>
+        <div class="total"><dt>Total tickets</dt><dd>{{ sla.total }}</dd><dd class="pct"></dd></div>
+      </dl>
+    </div>
+  </section>
+</div>
+
+<div class="dash-row dash-row-lists">
+  <section class="panel" aria-labelledby="attnTitle">
+    <div class="panel-head">
+      <div class="head-with-icon"><span class="chip chip-red">{{ m.icon('alert', 18) }}</span><div><h3 id="attnTitle">Needs attention</h3><p>Overdue, due within 2 hours, or High / Urgent priority</p></div></div>
+      <a class="link-more" href="{{ url_for('main.tickets', view='overdue') }}">View all {{ m.icon('chevron-right', 14) }}</a>
+    </div>
+    {% if attention %}
+    <div class="attn-wrap"><table class="attn">
+      <colgroup><col class="c-prio"><col class="c-id"><col><col class="c-cust"><col class="c-owner"><col class="c-sla"><col class="c-menu"></colgroup>
+      <thead><tr><th scope="col">Priority</th><th scope="col">Ticket ID</th><th scope="col">Subject</th><th scope="col">Customer</th><th scope="col">Owner</th><th scope="col">SLA</th><th scope="col" class="sr-only">Actions</th></tr></thead>
+      <tbody>
+      {% for row in attention %}{% set t = row.ticket %}
+        <tr>
+          <td><span class="prio prio-{{ t.priority.slug }}">{{ m.icon('flag', 12) }}{{ t.priority.name }}</span></td>
+          <td><a class="tid" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}">{{ t.ticket_number }}</a></td>
+          <td class="subj"><a href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}">{{ t.subject }}</a></td>
+          <td class="cust" title="{{ (t.customer.first_name ~ ' ' ~ (t.customer.last_name or ''))|trim }}">{{ (t.customer.first_name ~ ' ' ~ (t.customer.last_name or ''))|trim }}</td>
+          <td class="own">{% if t.assigned_user %}{% set parts = t.assigned_user.name.split() %}<span class="owner"><span class="avatar small" aria-hidden="true">{{ parts[0][:1]|upper }}</span>{{ parts[0] }}{% if parts|length > 1 %} {{ parts[-1][:1]|upper }}.{% endif %}</span>{% else %}<span class="muted">Unassigned</span>{% endif %}</td>
+          <td><span class="sla-pill sla-{{ row.sla_tone }}">{{ row.sla_label }}</span></td>
+          <td class="kebab-cell">
+            <details class="row-menu"><summary aria-label="Actions for {{ t.ticket_number }}">{{ m.icon('dots', 18) }}</summary>
+              <div class="row-menu-list">
+                <a href="#" data-peek="{{ t.id }}">Preview</a>
+                <a href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}">Open ticket</a>
+                <a href="{{ url_for('main.customer_detail', customer_id=t.customer_id) }}">View customer</a>
+              </div></details>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}{{ m.empty('check-circle', 'You are all caught up', 'Nothing is overdue, close to its deadline or marked urgent.') }}{% endif %}
+  </section>
+
+  <section class="panel" aria-labelledby="teamTitle">
+    <div class="panel-head">
+      <div><h3 id="teamTitle">Team workload</h3><p>Active tickets by department</p></div>
+      <a class="link-more" href="{{ url_for('main.tickets', view='open') }}">Open queue {{ m.icon('chevron-right', 14) }}</a>
+    </div>
+    {% set tints = ['blue', 'teal', 'purple', 'orange'] %}
+    {% for w in workload %}
+    <a class="load-row" href="{{ url_for('main.tickets', department=w.id, view='open') }}">
+      <span class="tile tile-{{ tints[loop.index0 % 4] }}" aria-hidden="true">{{ w.name[:1] }}</span>
+      <span class="load-name"><b>{{ w.name }}</b><small>{% if w.capacity %}{{ w.fill }}% of capacity{% else %}{{ w.share }}% of open{% endif %}</small></span>
+      <span class="load-bar"><i class="bar-{{ 'red' if w.full else tints[loop.index0 % 4] }}" style="width:{{ w.fill }}%"></i></span>
+      <span class="load-num"><b>{{ w.count }}{% if w.capacity %} / {{ w.capacity }}{% endif %}</b>
+        <small class="{{ 'late' if w.overdue or (w.capacity and w.left < 0) else '' }}">{% if w.overdue %}{{ w.overdue }} overdue{% elif w.capacity and w.left < 0 %}Over by {{ -w.left }}{% elif w.capacity %}{{ w.left }} left{% else %}On track{% endif %}</small></span>
+    </a>
+    {% else %}<div class="empty">No departments yet.</div>{% endfor %}
+  </section>
+</div>
+
+<section class="panel activity" aria-labelledby="actTitle">
+  <div class="panel-head slim"><h3 id="actTitle">Recent activity <small>across your support operation</small></h3></div>
+  {% if activity %}
+  <div class="activity-grid">
+    {% for a in activity %}
+    <{{ 'a' if a.href_ticket else 'div' }} class="act" {% if a.href_ticket %}href="{{ url_for('main.ticket_detail', ticket_id=a.href_ticket) }}"{% endif %}>
+      <span class="chip chip-{{ a.tone }}">{{ m.icon(a.icon, 18) }}</span>
+      <span class="act-body"><b>{{ a.title }}</b><span>{{ a.detail }}</span><small>{{ a.ago }}</small></span>
+    </{{ 'a' if a.href_ticket else 'div' }}>
+    {% endfor %}
+  </div>
+  {% else %}{{ m.empty('sparkles', 'No activity yet', 'Replies, status changes and new customers will show up here.') }}{% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

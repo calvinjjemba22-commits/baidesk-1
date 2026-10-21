@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sign in — {{ company_name }}</title>
+  <link rel="icon" href="{{ url_for('main.brand_favicon') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% if brand_css %}<style id="brand">{{ brand_css|safe }}</style>{% endif %}
+</head>
+<body>
+{% import '_macros.html' as m with context %}
+<div class="login-shell">
+  <div class="login-card">
+    <div class="brand">{{ m.brand_mark() }}<div><b>{{ brand.first }}</b><small>{{ brand.rest or 'Customer Support CRM' }}</small></div></div>
+    <h1>Welcome back</h1>
+    <p>{{ brand.tagline or 'Sign in to manage customer conversations and tickets.' }}</p>
+    {% with messages=get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="flash {{ cat }}" role="alert" style="margin:0 0 14px">{{ msg }}</div>{% endfor %}{% endwith %}
+    <form method="post">{{ csrf_field() }}
+      <label>Email<input type="email" name="email" required autofocus autocomplete="username" placeholder="you@company.com"></label>
+      <label>Password<input type="password" name="password" required autocomplete="current-password" placeholder="••••••••"></label>
+      <button class="primary">Sign in</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

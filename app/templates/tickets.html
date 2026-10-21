@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}Tickets — {{ company_name }}{% endblock %}
+{% block heading %}Tickets{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+<div class="toolbar">
+  <form class="search" method="get" role="search">
+    <input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">
+    <input name="q" value="{{ q }}" aria-label="Search tickets" placeholder="Search ticket number, subject, customer…">
+    <select name="status" aria-label="Status"><option value="">All statuses</option>{% for s in statuses %}<option value="{{ s.slug }}" {% if request.args.get('status')==s.slug %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select>
+    <select name="priority" aria-label="Priority"><option value="">All priorities</option>{% for p in priorities %}<option value="{{ p.slug }}" {% if request.args.get('priority')==p.slug %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select>
+    <select name="department" aria-label="Department"><option value="">All departments</option>{% for d in departments %}<option value="{{ d.id }}" {% if request.args.get('department')==d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select>
+    <select name="assignee" aria-label="Assignee"><option value="">Any assignee</option>{% for u in users %}<option value="{{ u.id }}" {% if request.args.get('assignee')==u.id|string %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+    <button>Filter</button>
+  </form>
+  <a class="secondary" href="{{ url_for('main.tickets_export', **request.args.to_dict()) }}" title="Download the current view as CSV">⬇ Export CSV</a>
+  <a class="primary" href="{{ url_for('main.ticket_new') }}">{{ m.icon('plus', 16) }} Create ticket</a>
+</div>
+
+<nav class="tabs" aria-label="Saved views">
+  {% for key, label in views %}<a class="{{ 'active' if view==key else '' }}" {% if view==key %}aria-current="page"{% endif %} href="{{ url_for('main.tickets', view=key) }}">{{ label }}</a>{% endfor %}
+  {% for v in saved_views %}<span class="saved-tab {{ 'active' if request.query_string.decode() == v.filters and v.filters else '' }}"><a href="{{ url_for('main.tickets') }}{{ '?' ~ v.filters if v.filters }}">{{ v.name }}{% if v.is_shared %} <small title="Shared with everyone">●</small>{% endif %}</a>{% if v.user_id == current_user.id or current_user.is_admin() %}<form method="post" action="{{ url_for('main.saved_view_delete', vid=v.id) }}">{{ csrf_field() }}<button aria-label="Remove view {{ v.name }}" title="Remove this view" data-confirm="Remove the view “{{ v.name }}”?">×</button></form>{% endif %}</span>{% endfor %}
+  {% if view in ('due_today','resolved_today') %}<a class="active" aria-current="page" href="#">{{ 'Due today' if view=='due_today' else 'Resolved today' }}</a>{% endif %}
+</nav>
+
+<form method="post" action="{{ url_for('main.saved_view_save') }}" class="save-view">{{ csrf_field() }}<input type="hidden" name="query" value="{{ request.query_string.decode() }}">
+  <input name="name" maxlength="60" placeholder="Save this filter as…" aria-label="Name for this saved view" required>{% if current_user.is_manager() %}<label class="check-label"><input type="checkbox" name="is_shared"> Share with team</label>{% endif %}<button class="secondary">Save view</button>
+</form>
+
+<section class="panel">
+  <form method="post" action="{{ url_for('main.tickets_bulk') }}" id="bulkForm">{{ csrf_field() }}
+    <input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
+    <div class="panel-head"><div><h3>Support queue</h3><p>{{ page.total }} ticket{{ '' if page.total==1 else 's' }} match the current view</p></div></div>
+    {% if can_edit and page.items %}
+    <div class="bulk-bar" id="bulkBar">
+      <span id="bulkCount" aria-live="polite">0 selected</span>
+      <select name="action" id="bulkAction" aria-label="Bulk action">
+        <option value="">Bulk action…</option><option value="auto">Auto-assign (least loaded)</option><option value="assign">Assign to</option><option value="status">Set status</option><option value="priority">Set priority</option>
+      </select>
+      <select name="value_assign" data-for="assign" aria-label="Assignee"><option value="">Unassigned</option>{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>
+      <select name="value_status" data-for="status" aria-label="Status">{% for s in statuses %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+      <select name="value_priority" data-for="priority" aria-label="Priority">{% for p in priorities %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select>
+      <button class="primary" data-confirm="Apply this change to the selected tickets?">Apply</button>
+    </div>
+    {% endif %}
+    <div class="table-wrap"><table>
+      <thead><tr>
+        {% if can_edit %}<th scope="col" class="check"><input type="checkbox" id="selectAll" aria-label="Select all tickets on this page"></th>{% endif %}
+        {{ m.sort_th('Ticket', 'ticket', sort, dir, 'desc') }}{{ m.sort_th('Customer', 'customer', sort, dir) }}{{ m.sort_th('Priority', 'priority', sort, dir, 'desc') }}
+        {{ m.sort_th('Status', 'status', sort, dir) }}{{ m.sort_th('Department', 'department', sort, dir) }}{{ m.sort_th('Assignee', 'assignee', sort, dir) }}{{ m.sort_th('Due', 'due', sort, dir) }}{{ m.sort_th('Updated', 'updated', sort, dir, 'desc') }}
+      </tr></thead>
+      <tbody>{% for t in page.items %}<tr>
+        {% if can_edit %}<td class="check"><input type="checkbox" name="ticket_ids" value="{{ t.id }}" class="rowcheck" aria-label="Select {{ t.ticket_number }}"></td>{% endif %}
+        <td class="tcell"><a class="strong" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}">{{ t.ticket_number }}</a><button type="button" class="peek-btn" data-peek="{{ t.id }}" aria-label="Preview {{ t.ticket_number }}" title="Preview (Space)">{{ m.icon('eye', 15) }}</button><small>{{ t.subject|truncate(60) }}</small></td>
+        <td><a href="{{ url_for('main.customer_detail', customer_id=t.customer.id) }}">{{ t.customer.first_name }} {{ t.customer.last_name }}</a></td>
+        <td>{{ m.pill(t.priority.name, t.priority.color) }}</td>
+        <td>{{ m.pill(t.status.name, t.status.color) }}</td>
+        <td>{{ t.department.name if t.department else 'Unassigned' }}</td>
+        <td>{{ t.assigned_user.name if t.assigned_user else 'Unassigned' }}</td>
+        <td class="{{ 'overdue' if t.due_at and t.due_at < now and not t.sla_paused_at and t.status.slug in ['open','pending','in-progress','escalated'] else '' }}">{% if t.sla_paused_at %}<span class="pill" title="Waiting on the customer — SLA clock paused">Paused</span>{% else %}{{ t.due_at|localdt('%d %b %H:%M') }}{% endif %}</td>
+        <td title="{{ t.updated_at|localdt }}">{{ t.updated_at|ago }}</td>
+      </tr>{% else %}<tr><td colspan="9">{{ m.empty('inbox', 'No tickets match this view', 'Try another filter, or clear the search. New tickets appear here as soon as they are created.', url_for('main.ticket_new'), 'Create a ticket') }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </form>
+  {{ m.pager(page) }}
+</section>
+{% endblock %}

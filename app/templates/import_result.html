@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Import {{ kind }} — {{ company_name }}{% endblock %}
+{% block heading %}{{ 'Check' if dry else 'Import' }} {{ kind }}{% endblock %}
+{% block actions %}<a class="secondary" href="{{ url_for('main.settings', tab='data') }}">← Back to Data &amp; backup</a>{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head"><div><h3>{% if dry %}Nothing was saved — this is a preview{% else %}Import finished{% endif %}</h3>
+    <p>{{ total }} row{{ '' if total==1 else 's' }} read · <b>{{ created }}</b> {{ 'would be created' if dry else 'created' }} · {{ skipped|length }} skipped · {{ errors|length }} with problems</p></div></div>
+  {% if dry and not errors %}<p class="flash success" style="margin:0 0 14px">Looks good. Go back, untick “Validate only”, and import the same file.</p>{% endif %}
+  {% if credentials %}
+  <div class="flash info" role="alert" style="margin:0 0 14px"><b>Write these down or download them now — the passwords are shown only once and are not stored.</b> Each person must choose their own password the first time they sign in.</div>
+  <p><a class="primary" download="baidesk-temporary-passwords.csv" href="{{ creds_uri }}">⬇ Download passwords (CSV)</a></p>
+  <div class="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Sign-in email</th><th scope="col">Role</th><th scope="col">Team</th><th scope="col">Temporary password</th></tr></thead>
+    <tbody>{% for n, e, r, t, p in credentials %}<tr><td>{{ n }}</td><td>{{ e }}</td><td>{{ r }}</td><td>{{ t or '—' }}</td><td><code>{{ p }}</code></td></tr>{% endfor %}</tbody></table></div>
+  {% endif %}
+  {% if errors %}<h3 class="subhead">Problems to fix (these rows were not imported)</h3>
+  <div class="table-wrap"><table><thead><tr><th scope="col">Row</th><th scope="col">Problem</th></tr></thead><tbody>{% for line, msg in errors[:200] %}<tr><td>{{ line }}</td><td>{{ msg }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+  {% if skipped %}<h3 class="subhead">Skipped</h3>
+  <div class="table-wrap"><table><thead><tr><th scope="col">Row</th><th scope="col">Reason</th></tr></thead><tbody>{% for line, msg in skipped[:200] %}<tr><td>{{ line }}</td><td>{{ msg }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</section>
+{% endblock %}

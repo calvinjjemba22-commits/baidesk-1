@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Coaching — {{ company_name }}{% endblock %}
+{% block heading %}Coaching{% endblock %}
+{% block subheading %}<p class="sub">How each agent is doing, and a few resolved tickets per person to review together.</p>{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+<nav class="tabs" aria-label="Period">{% for d in [7, 30, 90] %}<a class="{{ 'active' if days==d else '' }}" href="{{ url_for('main.coaching_index', days=d) }}">Last {{ d }} days</a>{% endfor %}</nav>
+<section class="panel">
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Agent</th><th scope="col">Resolved</th><th scope="col">First reply</th><th scope="col">Resolution</th><th scope="col">SLA met</th><th scope="col">Reopened</th><th scope="col">Promises kept</th><th scope="col">Review score</th></tr></thead>
+    <tbody>{% for c in cards %}<tr>
+      <td><a class="strong" href="{{ url_for('main.coaching_agent', uid=c.user.id, days=days) }}">{{ c.user.name }}</a></td>
+      <td>{{ c.resolved }}</td>
+      <td>{{ ('%.0f min' % c.avg_first_response_min) if c.avg_first_response_min is not none else '—' }}</td>
+      <td>{{ ('%.1f h' % c.avg_resolution_h) if c.avg_resolution_h is not none else '—' }}</td>
+      <td class="{{ 'overdue' if c.sla_met_pct is not none and c.sla_met_pct < 80 else '' }}">{{ (c.sla_met_pct ~ '%') if c.sla_met_pct is not none else '—' }}</td>
+      <td>{{ c.reopened }}</td>
+      <td>{{ (c.promise_rate ~ '%') if c.promise_rate is not none else '—' }}</td>
+      <td>{{ (c.avg_score ~ ' / 5 (' ~ c.reviews ~ ')') if c.avg_score is not none else '—' }}</td>
+    </tr>{% else %}<tr><td colspan="8" class="empty">No agents yet.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="muted-line">Figures cover tickets assigned to each agent and resolved in the period. Open a name to see their review samples.</p>
+</section>
+{% endblock %}

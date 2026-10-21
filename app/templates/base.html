@@ -1,0 +1,154 @@
+{% import '_macros.html' as m with context %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}BaiDesk{% endblock %}</title>
+  <script>
+    /* Apply the theme before first paint (no light→dark flash). */
+    (function(){try{
+      var t={{ (current_user.theme if current_user else '')|tojson }};
+      if(!t){t=localStorage.getItem('baidesk-theme')||'';}
+      if(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches){t='dark';}
+      if(t){document.documentElement.dataset.theme=t;}
+      if(localStorage.getItem('baidesk-nav')==='mini'){document.documentElement.dataset.nav='mini';}
+      if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.classList.add('anim');setTimeout(function(){document.documentElement.classList.remove('anim');},1400);}
+    }catch(e){}})();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="icon" href="{{ url_for('main.brand_favicon') }}" type="image/svg+xml">
+  {% if brand_css %}<style id="brand">{{ brand_css|safe }}</style>{% endif %}
+</head>
+<body data-new-ticket="{{ url_for('main.ticket_new') }}">
+<a class="skip-link" href="#main">Skip to content</a>
+{% set crumbs = {'main.dashboard':'Overview','main.my_day':'My day','main.queue_board':'Queue board','main.tickets':'Tickets','main.ticket_detail':'Tickets','main.ticket_new':'Tickets','main.ticket_edit':'Tickets','main.customers':'Customers','main.customer_detail':'Customers','main.customer_new':'Customers','main.customer_edit':'Customers','main.interaction_new':'Customers','main.reports':'Reports','main.notifications':'Notifications','main.settings':'Administration','main.user_edit':'Administration','main.profile':'Profile','main.global_search':'Search'} %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('main.dashboard') }}" title="{{ company_name }}">
+      {{ m.brand_mark() }}
+      <div><b>{{ brand.first }}</b><small>{{ brand.rest or 'Customer Support CRM' }}</small></div>
+    </a>
+    <nav aria-label="Main">
+      <div class="nav-label">Workspace</div>
+      <a data-go="m" title="My day" class="{{ 'active' if request.endpoint=='main.my_day' else '' }}" href="{{ url_for('main.my_day') }}">{{ m.icon('sun') }}<span>My day</span></a>
+      <a data-go="d" title="Overview" class="{{ 'active' if request.endpoint=='main.dashboard' else '' }}" href="{{ url_for('main.dashboard') }}">{{ m.icon('home') }}<span>Overview</span></a>
+      <a data-go="t" title="Tickets" class="{{ 'active' if request.endpoint in ['main.tickets','main.ticket_detail','main.ticket_new','main.ticket_edit'] else '' }}" href="{{ url_for('main.tickets') }}">{{ m.icon('inbox') }}<span>Tickets</span></a>
+      <a data-go="c" title="Customers" class="{{ 'active' if request.endpoint in ['main.customers','main.customer_detail','main.customer_new','main.customer_edit','main.interaction_new'] else '' }}" href="{{ url_for('main.customers') }}">{{ m.icon('users') }}<span>Customers</span></a>
+      <a data-go="p" title="Promises" class="{{ 'active' if request.endpoint=='main.promises' else '' }}" href="{{ url_for('main.promises') }}">{{ m.icon('calendar-check') }}<span>Promises</span></a>
+      <div class="nav-label">Insight</div>
+      {% if current_user and current_user.is_manager() %}
+      <a data-go="b" title="Queue board" class="{{ 'active' if request.endpoint=='main.queue_board' else '' }}" href="{{ url_for('main.queue_board') }}">{{ m.icon('columns') }}<span>Queue board</span></a>
+      <a data-go="r" title="Reports" class="{{ 'active' if request.endpoint=='main.reports' else '' }}" href="{{ url_for('main.reports') }}">{{ m.icon('chart') }}<span>Reports</span></a>
+      {% endif %}
+      <a data-go="o" title="{{ 'Coaching' if current_user and current_user.is_manager() else 'My scorecard' }}" class="{{ 'active' if request.endpoint in ['main.coaching_index','main.coaching_agent'] else '' }}" href="{{ url_for('main.coaching_index') }}">{{ m.icon('award') }}<span>{{ 'Coaching' if current_user and current_user.is_manager() else 'My scorecard' }}</span></a>
+      <div class="nav-label">System</div>
+      <a data-go="n" title="Notifications" class="{{ 'active' if request.endpoint=='main.notifications' else '' }}" href="{{ url_for('main.notifications') }}">{{ m.icon('bell') }}<span>Notifications</span><span class="count-badge" data-notif-badge aria-live="polite"></span></a>
+      {% if current_user and current_user.is_admin() %}
+      <a data-go="a" title="Administration" class="{{ 'active' if request.endpoint in ['main.settings','main.user_edit'] else '' }}" href="{{ url_for('main.settings') }}">{{ m.icon('settings') }}<span>Administration</span></a>
+      {% endif %}
+    </nav>
+    <button type="button" class="nav-toggle" id="navToggle" aria-label="Collapse menu" title="Collapse / expand menu">{{ m.icon('panel-left', 18) }}<span>Collapse</span></button>
+    {% if current_user %}
+    <details class="user-card">
+      <summary title="Account menu">
+        <div class="avatar" aria-hidden="true">{{ current_user.name[:1].upper() }}</div>
+        <div class="who"><b>{{ current_user.name }}</b><small>{{ current_user.roles[0].name if current_user.roles else 'User' }}{% if not current_user.is_available %} · Away{% endif %}</small></div>
+        {{ m.icon('chevron-right', 16) }}
+      </summary>
+      <div class="user-menu">
+        <a href="{{ url_for('main.profile') }}">{{ m.icon('users', 16) }}<span>Your profile</span></a>
+        <form method="post" action="{{ url_for('main.profile_availability') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}"><button>{{ m.icon('clock', 16) }}<span>{{ 'Mark me away' if current_user.is_available else 'Mark me available' }}</span></button></form>
+        <button type="button" onclick="toggleTheme()">{{ m.icon('moon', 16) }}<span>Toggle theme</span></button>
+        <a href="{{ url_for('main.logout') }}">{{ m.icon('log-out', 16) }}<span>Sign out</span></a>
+      </div>
+    </details>
+    {% endif %}
+  </aside>
+  <main class="main" id="main">
+    <header class="topbar">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="{{ url_for('main.dashboard') }}" aria-label="Home">{{ m.icon('home', 16) }}</a>
+        {{ m.icon('chevron-right', 14) }}<span>Customer Operations</span>
+        {% if crumbs.get(request.endpoint) %}{{ m.icon('chevron-right', 14) }}<span class="here">{{ crumbs[request.endpoint] }}</span>{% endif %}
+      </nav>
+      <form class="top-search" method="get" action="{{ url_for('main.global_search') }}" role="search">
+        {{ m.icon('search', 17) }}
+        <input id="globalSearch" name="q" type="search" aria-label="Search customers, tickets and phone numbers" placeholder="Search or jump to…" autocomplete="off">
+        <span class="kbd-hint" aria-hidden="true"><kbd>Ctrl</kbd><kbd>K</kbd></span>
+        <button class="sr-only">Search</button>
+      </form>
+      <div class="top-actions">
+        <button class="icon-btn" type="button" id="helpBtn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">{{ m.icon('help', 20) }}</button>
+        <a class="icon-btn" href="{{ url_for('main.notifications') }}" aria-label="Notifications" title="Notifications">{{ m.icon('bell', 20) }}<span class="count-badge float" data-notif-badge></span></a>
+        {% if current_user %}
+        <a class="user-chip" href="{{ url_for('main.profile') }}" title="Your profile">
+          <div class="avatar" aria-hidden="true">{{ current_user.name[:1].upper() }}</div>
+          <b>{{ current_user.name }}</b>{{ m.icon('chevron-down', 16) }}
+        </a>
+        {% endif %}
+      </div>
+    </header>
+    <div class="page-head">
+      <div><h1>{% block heading %}Customer Operations{% endblock %}</h1>{% block subheading %}{% endblock %}</div>
+      <div class="page-actions">{% block actions %}{% endblock %}</div>
+    </div>
+    {% with messages=get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="flash {{ cat }}" role="status">{{ msg }}</div>{% endfor %}{% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% if current_user %}
+<script type="application/json" id="palette-commands">{{ ([
+  {'label': 'Create ticket', 'hint': 'New', 'icon': 'plus', 'url': url_for('main.ticket_new')} if current_user.has_permission('ticket.create') else none,
+  {'label': 'My day', 'hint': 'G M', 'icon': 'sun', 'url': url_for('main.my_day')},
+  {'label': 'Queue board', 'hint': 'G B', 'icon': 'columns', 'url': url_for('main.queue_board')} if current_user.is_manager() else none,
+  {'label': 'Go to Overview', 'hint': 'G D', 'icon': 'home', 'url': url_for('main.dashboard')},
+  {'label': 'Go to Tickets', 'hint': 'G T', 'icon': 'inbox', 'url': url_for('main.tickets')},
+  {'label': 'My tickets', 'icon': 'inbox', 'url': url_for('main.tickets', view='mine')},
+  {'label': 'Overdue tickets', 'icon': 'clock', 'url': url_for('main.tickets', view='overdue')},
+  {'label': 'Unassigned tickets', 'icon': 'users', 'url': url_for('main.tickets', view='unassigned')},
+  {'label': 'Go to Customers', 'hint': 'G C', 'icon': 'users', 'url': url_for('main.customers')},
+  {'label': 'Go to Promises', 'hint': 'G P', 'icon': 'calendar-check', 'url': url_for('main.promises')},
+  {'label': 'Reports', 'hint': 'G R', 'icon': 'chart', 'url': url_for('main.reports')} if current_user.is_manager() else none,
+  {'label': 'Coaching' if current_user.is_manager() else 'My scorecard', 'icon': 'award', 'url': url_for('main.coaching_index')},
+  {'label': 'Notifications', 'hint': 'G N', 'icon': 'bell', 'url': url_for('main.notifications')},
+  {'label': 'Administration', 'hint': 'G A', 'icon': 'settings', 'url': url_for('main.settings')} if current_user.is_admin() else none,
+  {'label': 'Switch light / dark theme', 'icon': 'moon', 'run': 'theme'},
+  {'label': 'Mark me away / available', 'icon': 'clock', 'run': 'away'},
+  {'label': 'Keyboard shortcuts', 'hint': '?', 'icon': 'command', 'run': 'help'},
+] | select | list) | tojson }}</script>
+<dialog id="palette" class="palette" aria-label="Command palette">
+  <div class="pal-box">
+    <div class="pal-input">{{ m.icon('search', 18) }}<input id="palInput" type="text" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list" placeholder="Search tickets and customers, or type a command…" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div id="palList" class="pal-list" role="listbox" aria-label="Results"></div>
+    <div class="pal-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>Esc</kbd> close</span></div>
+  </div>
+</dialog>
+<div id="peekScrim" class="peek-scrim" hidden></div>
+<aside id="peek" class="peek" role="dialog" aria-modal="false" aria-labelledby="peekTitle" aria-hidden="true"><div class="peek-body"></div></aside>
+{% endif %}
+<div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+<dialog id="shortcuts" aria-label="Keyboard shortcuts">
+  <h3>Keyboard shortcuts</h3>
+  <dl class="keys">
+    <dt><kbd>/</kbd> or <kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Focus search</dd>
+    <dt><kbd>n</kbd></dt><dd>New ticket</dd>
+    <dt><kbd>g</kbd> then <kbd>d</kbd></dt><dd>Dashboard</dd>
+    <dt><kbd>g</kbd> then <kbd>t</kbd></dt><dd>Tickets</dd>
+    <dt><kbd>g</kbd> then <kbd>c</kbd></dt><dd>Customers</dd>
+    <dt><kbd>g</kbd> then <kbd>r</kbd></dt><dd>Reports (managers)</dd>
+    <dt><kbd>g</kbd> then <kbd>n</kbd></dt><dd>Notifications</dd>
+    <dt><kbd>g</kbd> then <kbd>p</kbd></dt><dd>Promises</dd>
+    <dt><kbd>g</kbd> then <kbd>o</kbd></dt><dd>Coaching / my scorecard</dd>
+    <dt><kbd>j</kbd> / <kbd>k</kbd></dt><dd>Next / previous ticket in a list</dd>
+    <dt><kbd>Enter</kbd></dt><dd>Open the highlighted ticket</dd>
+    <dt><kbd>r</kbd></dt><dd>Jump to the reply box (on a ticket)</dd>
+    <dt><kbd>?</kbd></dt><dd>This help</dd>
+  </dl>
+  <form method="dialog"><button class="secondary">Close</button></form>
+</dialog>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

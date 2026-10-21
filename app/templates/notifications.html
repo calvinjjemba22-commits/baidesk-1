@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Notifications — {{ company_name }}{% endblock %}
+{% block heading %}Notifications{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+<section class="panel">
+  <div class="panel-head"><div><h3>Your notifications</h3><p>Assignments, mentions, escalations and system alerts.</p></div>
+    <form method="post" action="{{ url_for('main.notifications_read_all') }}">{{ csrf_field() }}<button class="secondary">Mark all read</button></form></div>
+  <div class="notification-list">{% for n in page.items %}
+    <div class="notification {{ 'unread' if not n.is_read else '' }}">
+      <div class="notif-icon" aria-hidden="true">{{ '!' if n.type=='escalation' else '@' if n.type=='mention' else '✓' }}</div>
+      <div><b>{{ n.title }}</b><p>{{ n.message }}</p><small title="{{ n.created_at|localdt }}">{{ n.created_at|ago }}</small></div>
+      {% if n.entity_type=='Ticket' and n.entity_id %}<a class="secondary" href="{{ url_for('main.ticket_detail', ticket_id=n.entity_id) }}">Open</a>{% endif %}
+      {% if not n.is_read %}<form method="post" action="{{ url_for('main.notification_read', nid=n.id) }}">{{ csrf_field() }}<button class="secondary">Read</button></form>{% endif %}
+    </div>{% else %}<div class="empty">You're all caught up.</div>{% endfor %}</div>
+  {{ m.pager(page) }}
+</section>
+{% endblock %}

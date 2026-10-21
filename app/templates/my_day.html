@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}My day — {{ company_name }}{% endblock %}
+{% block heading %}{{ greeting }}, {{ current_user.name.split()[0] }}{% endblock %}
+{% block subheading %}<p class="sub">Your shift at a glance — what to do next, and what is waiting on you.</p>{% endblock %}
+{% block actions %}{% import '_macros.html' as m with context %}
+<form method="post" action="{{ url_for('main.profile_availability') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ url_for('main.my_day') }}">
+  <button class="avail-toggle {{ 'on' if current_user.is_available else 'off' }}" title="Away agents are skipped when tickets are assigned automatically"><i></i>{{ 'Available' if current_user.is_available else 'Away' }}<small>{{ 'tap to go away' if current_user.is_available else 'tap to come back' }}</small></button>
+</form>{% endblock %}
+
+{% block content %}
+{% import '_macros.html' as m with context %}
+<div class="md-top">
+  {% if d.up_next %}
+  {% set n = d.up_next %}
+  <section class="md-hero tone-{{ n.tone }}" aria-labelledby="upNextTitle">
+    <span class="md-eyebrow">{{ m.icon('zap', 14) }} Up next</span>
+    <h2 id="upNextTitle">{{ n.t.subject }}</h2>
+    <p class="md-meta"><b>{{ n.t.ticket_number }}</b> · {{ n.t.customer.first_name }} {{ n.t.customer.last_name }}{% if n.t.department %} · {{ n.t.department.name }}{% endif %}</p>
+    <div class="md-why"><span class="md-chip {{ n.tone }}">{{ n.text }}</span><span class="prio prio-{{ n.t.priority.slug }}">{{ m.icon('flag', 12) }}{{ n.t.priority.name }}</span>{% if n.unassigned %}<span class="md-chip muted">Unassigned — yours to claim</span>{% endif %}</div>
+    <div class="md-actions">
+      {% if n.unassigned %}<form method="post" action="{{ url_for('main.claim_next') }}">{{ csrf_field() }}<button class="md-btn solid">{{ m.icon('hand', 16) }} Claim &amp; open</button></form>
+      {% else %}<a class="md-btn solid" href="{{ url_for('main.ticket_detail', ticket_id=n.t.id) }}">Open ticket {{ m.icon('chevron-right', 16) }}</a>{% endif %}
+      <button type="button" class="md-btn ghost" data-peek="{{ n.t.id }}">{{ m.icon('eye', 16) }} Preview</button>
+    </div>
+  </section>
+  {% else %}
+  <section class="md-hero clear">
+    <span class="md-eyebrow">{{ m.icon('sparkles', 14) }} All clear</span>
+    <h2>{{ 'Nothing is waiting for you.' if not d.load else 'Everything on your plate is waiting on customers.' }}</h2>
+    <p class="md-meta">New tickets are assigned to you automatically while you are available.</p>
+  </section>
+  {% endif %}
+
+  <section class="panel md-load" aria-label="Your workload">
+    <div class="md-ring" style="--p:{{ d.load_pct }}"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" class="r-bg"/><circle cx="60" cy="60" r="50" class="r-fg {{ 'full' if d.full else '' }}" pathLength="100" stroke-dasharray="{{ d.load_pct }} 100"/></svg><div><b>{{ d.load }}</b><small>of {{ d.capacity }}</small></div></div>
+    <div class="md-load-text">
+      <h3>Your workload</h3>
+      <p>{% if d.over_capacity %}<span class="late">Over capacity</span> — finish a few before taking more.{% elif d.full %}At capacity. Resolve one to take another.{% else %}{{ d.capacity - d.load }} more can come your way.{% endif %}</p>
+      {% if d.unassigned_waiting and not d.full %}<form method="post" action="{{ url_for('main.claim_next') }}">{{ csrf_field() }}<button class="secondary">{{ m.icon('hand', 15) }} Take the next waiting ticket <small class="badge-n">{{ d.unassigned_waiting }}</small></button></form>{% endif %}
+    </div>
+  </section>
+</div>
+
+<section class="md-stats" aria-label="Today so far">
+  <div><b>{{ d.resolved_today }}</b><span>Resolved today</span></div>
+  <div><b>{{ d.avg_first_response }}</b><span>Avg first reply</span></div>
+  <div class="{{ 'bad' if d.overdue_count else '' }}"><b>{{ d.overdue_count }}</b><span>Overdue</span></div>
+  <div class="{{ 'bad' if d.promises_total else '' }}"><b>{{ d.promises_total }}</b><span>Promises due</span></div>
+</section>
+
+<div class="md-grid">
+  <section class="panel">
+    <div class="panel-head"><div><h3>Needs you now</h3><p>Overdue, due within 2 hours, or high priority</p></div>{% if d.needs_now_total > 6 %}<a class="link-more" href="{{ url_for('main.tickets', view='mine') }}">All mine {{ m.icon('chevron-right', 14) }}</a>{% endif %}</div>
+    {% for x in d.needs_now %}<a class="md-row" href="{{ url_for('main.ticket_detail', ticket_id=x.t.id) }}"><span class="prio prio-{{ x.t.priority.slug }}">{{ x.t.priority.name }}</span><span class="md-row-main"><b>{{ x.t.ticket_number }}</b><em>{{ x.t.subject|truncate(48) }}</em></span><span class="sla-pill sla-{{ x.tone }}">{{ x.text }}</span></a>
+    {% else %}{{ m.empty('check-circle', 'Nothing urgent', 'You are ahead of every deadline.') }}{% endfor %}
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Customer replied</h3><p>They wrote back — your move</p></div></div>
+    {% for t in d.replied %}<a class="md-row" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}#thread"><span class="md-dot"></span><span class="md-row-main"><b>{{ t.ticket_number }}</b><em>{{ t.customer.first_name }} {{ t.customer.last_name }} · {{ t.subject|truncate(36) }}</em></span><span class="muted-line">{{ t.updated_at|ago }}</span></a>
+    {% else %}{{ m.empty('message', 'No replies waiting', 'When a customer answers, the ticket shows up here.') }}{% endfor %}
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Promises to follow up</h3><p>Due today or already late</p></div><a class="link-more" href="{{ url_for('main.promises', scope='mine') }}">All promises {{ m.icon('chevron-right', 14) }}</a></div>
+    {% for p in d.promises %}<div class="md-row static"><span class="md-row-main"><b>{{ p.customer.first_name }} {{ p.customer.last_name }}{% if p.amount %} · UGX {{ '{:,}'.format(p.amount) }}{% endif %}</b><em>{{ 'Due today' if p.promised_date == today else 'Promised ' ~ p.promised_date.strftime('%d %b') }}{% if p.note %} · {{ p.note|truncate(30) }}{% endif %}</em></span>
+      <span class="inline-actions"><form method="post" action="{{ url_for('main.promise_action', pid=p.id, action='kept') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ url_for('main.my_day') }}"><button>Kept</button></form><form method="post" action="{{ url_for('main.promise_action', pid=p.id, action='broken') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ url_for('main.my_day') }}"><button>Broken</button></form></span></div>
+    {% else %}{{ m.empty('calendar-check', 'No promises due', 'Record a promise on a ticket and it will be here on the day.') }}{% endfor %}
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Waiting on customers</h3><p>SLA clock paused</p></div></div>
+    {% for t in d.waiting_customer %}<a class="md-row" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}"><span class="md-dot paused"></span><span class="md-row-main"><b>{{ t.ticket_number }}</b><em>{{ t.customer.first_name }} {{ t.customer.last_name }} · {{ t.subject|truncate(36) }}</em></span><span class="muted-line">{{ t.sla_paused_at|ago }}</span></a>
+    {% else %}{{ m.empty('clock', 'Nothing paused', 'Tickets set to Pending wait here until the customer answers.') }}{% endfor %}
+  </section>
+</div>
+{% endblock %}

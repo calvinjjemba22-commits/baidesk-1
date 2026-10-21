@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}{{ agent.name }} — Coaching — {{ company_name }}{% endblock %}
+{% block heading %}{{ agent.name }}{% endblock %}
+{% block subheading %}<p class="sub">Scorecard for the last {{ days }} days.</p>{% endblock %}
+{% block actions %}{% if current_user.is_manager() %}<a class="secondary" href="{{ url_for('main.coaching_index', days=days) }}">← All agents</a>{% endif %}{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+<nav class="tabs" aria-label="Period">{% for d in [7, 30, 90] %}<a class="{{ 'active' if days==d else '' }}" href="{{ url_for('main.coaching_agent', uid=agent.id, days=d) }}">Last {{ d }} days</a>{% endfor %}</nav>
+<section class="kpi-row" aria-label="Scorecard">
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-blue">{{ m.icon('check-circle', 18) }}</span><span class="kpi-label">Resolved</span></div><div class="kpi-value">{{ card.resolved }}</div></div>
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-teal">{{ m.icon('zap', 18) }}</span><span class="kpi-label">First reply</span></div><div class="kpi-value long">{{ ('%.0f min' % card.avg_first_response_min) if card.avg_first_response_min is not none else '—' }}</div></div>
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-teal">{{ m.icon('shield', 18) }}</span><span class="kpi-label">SLA met</span></div><div class="kpi-value">{{ (card.sla_met_pct ~ '%') if card.sla_met_pct is not none else '—' }}</div></div>
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-amber">{{ m.icon('refresh', 18) }}</span><span class="kpi-label">Reopened</span></div><div class="kpi-value">{{ card.reopened }}</div></div>
+  <div class="kpi-card"><div class="kpi-top"><span class="chip chip-purple">{{ m.icon('award', 18) }}</span><span class="kpi-label">Review score</span></div><div class="kpi-value long">{{ (card.avg_score ~ ' / 5') if card.avg_score is not none else '—' }}</div></div>
+</section>
+<div class="dash-row dash-row-lists">
+  {% if can_review %}
+  <section class="panel">
+    <div class="panel-head"><div><h3>Tickets to review</h3><p>A stable sample of resolved tickets nobody has reviewed yet. Read the conversation, then score it.</p></div></div>
+    {% for t in samples %}
+    <form method="post" action="{{ url_for('main.coaching_review') }}" class="review-row">{{ csrf_field() }}<input type="hidden" name="ticket_id" value="{{ t.id }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
+      <div><a class="strong" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}" target="_blank" rel="noopener">{{ t.ticket_number }}</a> <span class="muted-line">{{ t.subject|truncate(70) }}</span></div>
+      <div class="review-inputs"><select name="score" required aria-label="Score for {{ t.ticket_number }}"><option value="">Score…</option>{% for n in [5,4,3,2,1] %}<option value="{{ n }}">{{ n }} — {{ {5:'Excellent',4:'Good',3:'OK',2:'Weak',1:'Poor'}[n] }}</option>{% endfor %}</select>
+      <input name="notes" maxlength="1000" placeholder="What went well / what to improve" aria-label="Review notes"><button class="secondary">Save</button></div>
+    </form>{% else %}<div class="empty">Nothing left to review in this period.</div>{% endfor %}
+  </section>
+  {% endif %}
+  <section class="panel">
+    <div class="panel-head"><div><h3>Recent reviews</h3><p>Feedback on this agent’s tickets.</p></div></div>
+    {% for r in reviews %}<div class="history-row"><b>{{ r.score }} / 5 · {{ r.ticket.ticket_number }}</b><span>{{ r.notes or 'No notes' }}</span><small>{{ r.reviewer.name }} · {{ r.created_at|ago }}</small></div>{% else %}<div class="empty">No reviews yet.</div>{% endfor %}
+  </section>
+</div>
+{% endblock %}

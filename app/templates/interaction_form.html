@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Log interaction — {{ company_name }}{% endblock %}
+{% block heading %}Log interaction{% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="panel form-panel">{{ csrf_field() }}
+  <div class="context-line">Customer: <b>{{ customer.first_name }} {{ customer.last_name }}</b> · {{ customer.customer_number }}</div>
+  <div class="form-grid" style="margin-top:16px">
+    <label>Channel<select name="channel">{% for c in channels %}<option>{{ c }}</option>{% endfor %}</select></label>
+    <label>Direction<select name="direction">{% for d in directions %}<option>{{ d }}</option>{% endfor %}</select></label>
+    <label>Disposition<select name="disposition"><option value="">Select</option>{% for d in dispositions %}<option>{{ d.name }}</option>{% endfor %}</select></label>
+    <label>Linked ticket<select name="ticket_id"><option value="">Standalone</option>{% for t in tickets %}<option value="{{ t.id }}">{{ t.ticket_number }} — {{ t.subject }}</option>{% endfor %}</select></label>
+    <label class="full-field">Subject<input name="subject"></label>
+    <label class="full-field">Notes<textarea name="notes" rows="8" placeholder="What happened? What did the customer need? What was agreed?"></textarea></label>
+    <label class="full-field">Attachment (optional)<input type="file" name="attachment" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"></label>
+  </div>
+  <div class="actions"><a class="secondary" href="{{ url_for('main.customer_detail', customer_id=customer.id) }}">Cancel</a><button class="primary">Save interaction</button></div>
+</form>
+{% endblock %}

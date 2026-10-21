@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}Access denied — {{ company_name }}{% endblock %}
+{% block heading %}Access denied{% endblock %}
+{% block content %}
+<section class="panel" style="margin-top:24px"><h2>You don't have permission to access this area.</h2><p>Ask a BaiDesk administrator to update your role or permissions.</p><a class="primary" href="{{ url_for('main.dashboard') }}">Return to dashboard</a></section>
+{% endblock %}

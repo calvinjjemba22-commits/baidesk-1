@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block title %}Reports — {{ company_name }}{% endblock %}
+{% block heading %}Reports & performance{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+{% if insights %}
+<section class="panel insights no-print" aria-labelledby="insTitle">
+  <div class="panel-head"><div><h3 id="insTitle">What changed this week</h3><p>Last 7 days compared with the 7 before, from your own tickets.</p></div></div>
+  <ul>{% for i in insights %}<li class="ins-{{ i.tone }}"><i aria-hidden="true"></i>{{ i.text }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+<div class="toolbar no-print">
+  <form class="search" method="get" role="search" aria-label="Report filters">
+    <label class="inline-label">From<input type="date" name="from" value="{{ p.d_from.isoformat() }}" required></label>
+    <label class="inline-label">To<input type="date" name="to" value="{{ p.d_to.isoformat() }}" required></label>
+    <label class="inline-label">Department<select name="department"><option value="">All departments</option>{% for d in departments %}<option value="{{ d.id }}" {% if p.dept_id==d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></label>
+    <button class="primary">Apply</button>
+  </form>
+  <details class="menu">
+    <summary class="secondary">⬇ Export</summary>
+    <div class="menu-list">
+      <a href="{{ url_for('main.report_export', kind='summary', **qargs) }}">Full summary (CSV)</a>
+      <a href="{{ url_for('main.report_export', kind='tickets', **qargs) }}">Ticket details — {{ ticket_count }} rows (CSV)</a>
+      {% for d in datasets %}<a href="{{ url_for('main.report_export', kind=d.key, **qargs) }}">{{ d.title }} (CSV)</a>{% endfor %}
+    </div>
+  </details>
+  <button class="secondary" type="button" onclick="window.print()">🖨 Print / Save as PDF</button>
+</div>
+<nav class="tabs no-print" aria-label="Date ranges">
+  {% for label, f, t in presets %}<a class="{{ 'active' if f==p.d_from and t==p.d_to else '' }}" href="{{ url_for('main.reports', **{'from': f.isoformat(), 'to': t.isoformat(), 'department': p.dept_id}) }}">{{ label }}</a>{% endfor %}
+</nav>
+<p class="pad report-range">Showing {{ p.d_from.strftime('%d %b %Y') }} – {{ p.d_to.strftime('%d %b %Y') }}{% if dept_name %} · {{ dept_name }}{% endif %}</p>
+
+<section class="kpis kpis-6">
+  <div class="kpi"><small>Created</small><strong>{{ kpis.created }}</strong><span>Tickets in period</span></div>
+  <div class="kpi"><small>Resolved</small><strong>{{ kpis.resolved }}</strong><span>Resolved in period</span></div>
+  <div class="kpi"><small>Open now</small><strong>{{ kpis.open_now }}</strong><span>{{ kpis.overdue_now }} overdue</span></div>
+  <div class="kpi"><small>Avg first response</small><strong>{{ '%.1f h'|format(kpis.avg_first_response) if kpis.avg_first_response is not none else '—' }}</strong><span>Created in period</span></div>
+  <div class="kpi"><small>Avg resolution</small><strong>{{ '%.1f h'|format(kpis.avg_resolution) if kpis.avg_resolution is not none else '—' }}</strong><span>Resolved in period</span></div>
+  <div class="kpi"><small>SLA met</small><strong>{{ '%.0f%%'|format(kpis.res_sla) if kpis.res_sla is not none else '—' }}</strong><span>Resolution{% if kpis.frt_sla is not none %} · first reply {{ '%.0f%%'|format(kpis.frt_sla) }}{% endif %}</span></div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><div><h3>Daily volume</h3><p>Created vs resolved per day</p></div><div class="legend"><span><i class="dot a"></i>Created</span><span><i class="dot b"></i>Resolved</span></div></div>
+  <div class="chart" role="img" aria-label="Daily created and resolved ticket counts">
+    {% for day, c, r in daily %}<div class="col" title="{{ day }}: {{ c }} created, {{ r }} resolved"><i class="a" style="height:{{ (c/peak*100)|round }}%"></i><i class="b" style="height:{{ (r/peak*100)|round }}%"></i></div>{% endfor %}
+  </div>
+  <div class="chart-axis"><span>{{ p.d_from.strftime('%d %b') }}</span><span>peak {{ peak }}/day</span><span>{{ p.d_to.strftime('%d %b') }}</span></div>
+</section>
+
+<div class="grid-2">
+  {% for d in datasets if d.key != 'daily' %}
+  <section class="panel">
+    <div class="panel-head"><div><h3>{{ d.title }}</h3><p>{{ d.note }}</p></div><a class="no-print" href="{{ url_for('main.report_export', kind=d.key, **qargs) }}" aria-label="Export {{ d.title }} as CSV">CSV ⬇</a></div>
+    <div class="table-wrap"><table>
+      <thead><tr>{% for h in d.headers %}<th scope="col" {% if not loop.first %}class="num"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for row in d.rows %}<tr>{% for cell in row %}<td {% if not loop.first %}class="num"{% endif %}>{% if cell is none %}—{% elif cell is float %}{{ '%.1f'|format(cell) }}{% else %}{{ cell }}{% endif %}</td>{% endfor %}</tr>
+      {% else %}<tr><td colspan="{{ d.headers|length }}" class="empty">No data for this period.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

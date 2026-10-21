@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block title %}{{ customer.first_name }} — {{ company_name }}{% endblock %}
+{% block heading %}Customer 360{% endblock %}
+{% block content %}
+<div class="profile-head">
+  <div class="profile-avatar" aria-hidden="true">{{ customer.first_name[:1].upper() }}{{ customer.last_name[:1].upper() }}</div>
+  <div><span class="eyebrow">{{ customer.customer_number }}{% if customer.status != 'Active' %} · {{ customer.status|upper }}{% endif %}</span><h2>{{ customer.first_name }} {{ customer.last_name }}</h2><p>{{ customer.company or 'Individual customer' }} · {{ customer.location or 'Location not set' }}</p></div>
+  <div class="spacer"></div>
+  {% if current_user.has_permission('customer.edit') %}<a class="secondary" href="{{ url_for('main.customer_edit', customer_id=customer.id) }}">✎ Edit</a>{% endif %}
+  <a class="secondary" href="{{ url_for('main.interaction_new', customer_id=customer.id) }}">＋ Log interaction</a>
+  <a class="primary" href="{{ url_for('main.ticket_new', customer_id=customer.id) }}">＋ New ticket</a>
+</div>
+<div class="customer-grid">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><div><h3>Customer overview</h3><p>Contact information and active work</p></div></div>
+      <div class="facts">
+        <div><small>EMAIL</small><b>{{ customer.email or 'Not provided' }}</b></div>
+        <div><small>PHONE</small><b>{% for p in customer.phones %}{{ p.phone_number }}{% if p.is_primary and customer.phones|length > 1 %} (primary){% endif %}{% if not loop.last %}<br>{% endif %}{% else %}Not provided{% endfor %}</b></div>
+        <div><small>COMPANY</small><b>{{ customer.company or 'Not provided' }}</b></div>
+        <div><small>LOCATION</small><b>{{ customer.location or 'Not provided' }}</b></div>
+      </div>
+      <h3 class="subhead">Open tickets <span class="pill">{{ open_tickets|length }}</span></h3>
+      {% for t in open_tickets|sort(attribute='updated_at', reverse=true) %}<a class="ticket-mini" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}"><span>{{ t.ticket_number }}</span><b>{{ t.subject }}</b><em>{{ t.status.name }}</em></a>{% else %}<div class="empty">No active tickets.</div>{% endfor %}
+      <h3 class="subhead">Notes</h3><p class="prewrap">{{ customer.notes or 'No customer notes recorded.' }}</p>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h3>Recent interactions</h3><p>Calls, messages and visits</p></div></div>
+      {% for x in interactions %}<div class="history-row"><b>{{ x.channel }} · {{ x.direction }}{% if x.disposition %} · {{ x.disposition }}{% endif %}</b><span>{{ x.subject or 'No subject' }}{% if x.notes %} — {{ x.notes|truncate(140) }}{% endif %}</span><small>{{ x.interaction_at|localdt }} · {{ x.user.name }}</small></div>{% else %}<div class="empty">No interactions logged.</div>{% endfor %}
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h3>Promises to pay</h3><p>What this customer has committed to</p></div></div>
+      {% for p in promises %}<div class="history-row"><b>{{ p.promised_date.strftime('%d %b %Y') }}{% if p.amount %} · UGX {{ '{:,}'.format(p.amount) }}{% endif %} — {{ p.status }}</b><span>{{ p.note or 'No note' }}</span><small>recorded by {{ p.owner.name }}{% if p.ticket %} on {{ p.ticket.ticket_number }}{% endif %}</small></div>{% else %}<div class="empty">No promises recorded.</div>{% endfor %}
+    </section>
+    {% if attachments %}
+    <section class="panel">
+      <div class="panel-head"><div><h3>Attachments</h3><p>Files from tickets and interactions</p></div></div>
+      {% for l in attachments %}<div class="list-row"><span><a href="{{ url_for('main.uploaded_file', filename=l.attachment.stored_filename) }}" target="_blank" rel="noopener">📎 {{ l.attachment.filename }}</a><small>{{ l.ticket.ticket_number if l.ticket else 'Interaction' }} · {{ l.attachment.created_at|localdt }}</small></span></div>{% endfor %}
+    </section>
+    {% endif %}
+  </div>
+  <section class="panel timeline-panel">
+    <div class="panel-head"><div><h3>Customer timeline</h3><p>Immutable activity history</p></div>
+      <div style="display:flex;gap:7px"><select id="timelineDirection" aria-label="Timeline order" onchange="loadTimeline({{ customer.id }})"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select><button class="secondary" type="button" onclick="loadTimeline({{ customer.id }})">Refresh</button></div></div>
+    <div id="timeline" class="timeline">{% for x in timeline %}<div class="timeline-item"><div class="timeline-dot"></div><div><div class="timeline-meta"><b>{{ x.activity_type.replace('_',' ') }}</b><span>{{ x.created_at|localdt }}</span></div><p>{{ x.description }}</p><small>by {{ x.actor.name if x.actor else 'System' }}</small></div></div>{% else %}<div class="empty">Timeline is empty.</div>{% endfor %}</div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]})}
+async function loadTimeline(id){
+  var direction=document.getElementById('timelineDirection').value;
+  var r=await fetch('/api/timeline/'+id+'?direction='+direction); if(!r.ok) return;
+  var rows=await r.json(); var el=document.getElementById('timeline');
+  el.innerHTML=rows.length?rows.map(function(x){return '<div class="timeline-item"><div class="timeline-dot"></div><div><div class="timeline-meta"><b>'+escapeHtml(x.type.replaceAll('_',' '))+'</b><span>'+escapeHtml(x.display)+'</span></div><p>'+escapeHtml(x.description)+'</p><small>by '+escapeHtml(x.actor)+'</small></div></div>'}).join(''):'<div class="empty">No timeline entries match the current filter.</div>';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Search — {{ company_name }}{% endblock %}
+{% block heading %}Global search{% endblock %}
+{% block content %}
+<div class="toolbar"><form class="search" method="get" action="{{ url_for('main.global_search') }}" role="search"><input name="q" value="{{ q }}" aria-label="Search" placeholder="Search everything…"><button>Search</button></form></div>
+{% if q %}
+<div class="search-results pad">
+  <section class="panel"><div class="panel-head"><div><h3>Customers</h3><p>Matching customer records</p></div></div><div class="result-list">
+    {% for c in customers %}<a class="result-item" href="{{ url_for('main.customer_detail', customer_id=c.id) }}"><div><b>{{ c.first_name }} {{ c.last_name }}</b><small>{{ c.customer_number }} · {{ c.email or 'No email' }} · {{ c.phones[0].phone_number if c.phones else 'No phone' }}</small></div><span aria-hidden="true">→</span></a>{% else %}<div class="empty">No matching customers.</div>{% endfor %}</div></section>
+  <section class="panel"><div class="panel-head"><div><h3>Tickets</h3><p>Matching tickets in your permitted queue</p></div></div><div class="result-list">
+    {% for t in tickets %}<a class="result-item" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}"><div><b>{{ t.ticket_number }} · {{ t.subject }}</b><small>{{ t.customer.first_name }} {{ t.customer.last_name }} · {{ t.status.name }} · {{ t.priority.name }}</small></div><span aria-hidden="true">→</span></a>{% else %}<div class="empty">No matching tickets.</div>{% endfor %}</div></section>
+  <section class="panel"><div class="panel-head"><div><h3>Interactions</h3><p>Matching interaction notes</p></div></div><div class="result-list">
+    {% for x in interactions %}<a class="result-item" href="{{ url_for('main.customer_detail', customer_id=x.customer_id) }}"><div><b>{{ x.channel }} · {{ x.subject or 'Interaction' }}</b><small>{{ (x.notes or 'No notes')|truncate(120) }} · {{ x.interaction_at|localdt }}</small></div><span aria-hidden="true">→</span></a>{% else %}<div class="empty">No matching interactions.</div>{% endfor %}</div></section>
+</div>
+{% else %}
+<section class="panel" style="margin-top:20px"><div class="empty">Search by customer name, phone number, email, ticket number, subject or interaction notes.</div></section>
+{% endif %}
+{% endblock %}

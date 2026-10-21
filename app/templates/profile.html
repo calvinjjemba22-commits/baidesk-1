@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Your profile — {{ company_name }}{% endblock %}
+{% block heading %}Your profile{% endblock %}
+{% block content %}
+{% if forced %}<div class="flash info" data-persist="1" role="alert" style="margin:0 32px 16px"><b>Set your own password to continue.</b> The one you signed in with was chosen by an administrator.</div>{% endif %}
+<div class="grid-2">
+  <section class="panel">
+    <div class="panel-head"><div><h3>{{ current_user.name }}</h3><p>{{ current_user.email }}</p></div></div>
+    <div class="facts">
+      <div><small>ROLE</small><b>{{ current_user.roles|map(attribute='name')|join(', ') or '—' }}</b></div>
+      <div><small>DEPARTMENTS</small><b>{{ current_user.departments|map(attribute='name')|join(', ') or 'None' }}</b></div>
+    </div>
+    <h3 class="subhead">Appearance</h3>
+    <button class="secondary" type="button" onclick="toggleTheme()">◐ Switch light / dark theme</button>
+    <p class="muted-line">Your choice is remembered on every device you sign in from.</p>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Change password</h3><p>Use at least 8 characters.</p></div></div>
+    <form method="post" class="stack-form">{{ csrf_field() }}
+      <label>Current password<input type="password" name="current_password" required autocomplete="current-password"></label>
+      <label>New password<input type="password" name="new_password" required minlength="8" autocomplete="new-password"></label>
+      <label>Confirm new password<input type="password" name="confirm_password" required minlength="8" autocomplete="new-password"></label>
+      <button class="primary">Update password</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

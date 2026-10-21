@@ -1,0 +1,32 @@
+{% import '_macros.html' as m with context %}
+<header class="peek-head">
+  <div>
+    <small class="peek-num">{{ t.ticket_number }}</small>
+    <h2 id="peekTitle">{{ t.subject }}</h2>
+  </div>
+  <button type="button" class="icon-btn" data-peek-close aria-label="Close preview">{{ m.icon('x', 20) }}</button>
+</header>
+<div class="peek-pills">
+  <span class="pill">{{ t.status.name }}</span>
+  <span class="prio prio-{{ t.priority.slug }}">{{ m.icon('flag', 12) }}{{ t.priority.name }}</span>
+  {% if t.department %}<span class="pill">{{ t.department.name }}</span>{% endif %}
+  {% if t.category %}<span class="pill">{{ t.category.name }}</span>{% endif %}
+</div>
+<dl class="peek-facts">
+  <div><dt>Customer</dt><dd><a href="{{ url_for('main.customer_detail', customer_id=t.customer_id) }}">{{ t.customer.first_name }} {{ t.customer.last_name }}</a>{% if t.customer.phones %}<small>{{ t.customer.phones[0].phone_number }}</small>{% endif %}</dd></div>
+  <div><dt>Owner</dt><dd>{% if t.assigned_user %}{{ t.assigned_user.name }}{% else %}<span class="late">Unassigned</span>{% endif %}</dd></div>
+  <div><dt>Deadline</dt><dd>{% if t.sla_paused_at %}<span class="sla-pill sla-amber">Paused — waiting on customer</span>
+    {% elif t.resolved_at %}Resolved {{ t.resolved_at|ago }}
+    {% elif t.due_at %}<span class="{{ 'late' if late else '' }}">{{ t.due_at|localdt }}{% if late %} · overdue{% endif %}</span>{% else %}—{% endif %}</dd></div>
+  <div><dt>Created</dt><dd>{{ t.created_at|ago }}</dd></div>
+</dl>
+<h3 class="peek-sub">Request</h3>
+<p class="peek-text">{{ t.description|truncate(320) }}</p>
+<h3 class="peek-sub">Latest activity</h3>
+{% for c in comments %}<div class="peek-msg {{ c.comment_type|lower }}"><b>{{ c.user.name }}</b><em>{{ {'INTERNAL':'Internal note','CUSTOMER':'Customer reply'}.get(c.comment_type, 'Reply') }} · {{ c.created_at|ago }}</em><p>{{ c.body|truncate(220) }}</p></div>{% endfor %}
+{% for x in contacts %}<div class="peek-msg contact"><b>{{ x.user.name }}</b><em>{{ x.channel }} · {{ x.direction }} · {{ x.interaction_at|ago }}</em><p>{{ (x.notes or '')|truncate(220) }}</p></div>{% endfor %}
+{% if not comments and not contacts %}<p class="muted-line">Nothing has happened on this ticket yet.</p>{% endif %}
+<footer class="peek-foot">
+  <a class="primary" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}">Open ticket {{ m.icon('chevron-right', 16) }}</a>
+  <a class="secondary" href="{{ url_for('main.customer_detail', customer_id=t.customer_id) }}">Customer</a>
+</footer>

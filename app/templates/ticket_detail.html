@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}{{ ticket.ticket_number }} — {{ company_name }}{% endblock %}
+{% block heading %}{{ ticket.ticket_number }}{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+{% set resolved_status = statuses|selectattr('slug', 'equalto', 'resolved')|first %}
+{% set ch_icon = {'Call': 'phone', 'SMS': 'message', 'WhatsApp': 'message', 'Email': 'inbox'} %}
+<header class="tk-head">
+  <div class="tk-title">
+    <div class="tk-line"><span class="tk-num">{{ ticket.ticket_number }}</span>
+      <span class="pill">{{ ticket.status.name }}</span><span class="prio prio-{{ ticket.priority.slug }}">{{ m.icon('flag', 12) }}{{ ticket.priority.name }}</span>
+      {% if ticket.department %}<span class="pill">{{ ticket.department.name }}</span>{% endif %}{% if ticket.category %}<span class="pill">{{ ticket.category.name }}</span>{% endif %}</div>
+    <h2>{{ ticket.subject }}</h2>
+    <p><a href="{{ url_for('main.customer_detail', customer_id=ticket.customer.id) }}"><b>{{ ticket.customer.first_name }} {{ ticket.customer.last_name }}</b></a>
+      {% if ticket.customer.phones %} · {{ ticket.customer.phones[0].phone_number }}{% endif %} · owner: {% if ticket.assigned_user %}<b>{{ ticket.assigned_user.name }}</b>{% else %}<span class="late">unassigned</span>{% endif %}</p>
+  </div>
+  <div class="tk-side">
+    <div class="tk-sla {{ 'late' if ticket.due_at and ticket.due_at < now and is_running else '' }}">
+      <small>{{ 'Paused' if ticket.sla_paused_at else 'Deadline' }}</small>
+      {% if not ticket.due_at %}<b>—</b>
+      {% elif ticket.sla_paused_at %}<b>{{ m.icon('pause', 14) }} Waiting on customer</b>
+      {% elif is_running %}<b data-due="{{ ticket.due_at|iso_utc }}">—</b>
+      {% else %}<b>{{ 'Met' if ticket.resolved_at and ticket.resolved_at <= ticket.due_at else 'Missed' if ticket.resolved_at else '—' }}</b>{% endif %}
+    </div>
+    <div class="tk-actions">
+      {% if current_user.has_permission('ticket.edit') %}
+        {% if ticket.assigned_user_id != current_user.id %}<form method="post" action="{{ url_for('main.ticket_update', ticket_id=ticket.id) }}">{{ csrf_field() }}<input type="hidden" name="status_id" value="{{ ticket.status_id }}"><input type="hidden" name="priority_id" value="{{ ticket.priority_id }}"><input type="hidden" name="assigned_user_id" value="{{ current_user.id }}"><button class="secondary">{{ m.icon('hand', 15) }} Take it</button></form>{% endif %}
+        {% if is_running and resolved_status %}<form method="post" action="{{ url_for('main.ticket_update', ticket_id=ticket.id) }}">{{ csrf_field() }}<input type="hidden" name="status_id" value="{{ resolved_status.id }}"><input type="hidden" name="priority_id" value="{{ ticket.priority_id }}"><button class="primary">{{ m.icon('check', 15) }} Resolve</button></form>{% endif %}
+        <a class="secondary" href="{{ url_for('main.ticket_edit', ticket_id=ticket.id) }}">{{ m.icon('note', 15) }} Edit</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+<div class="ticket-layout">
+  <section>
+    <section class="panel tk-thread" id="conversation">
+      <div class="tk-bar"><h3 id="thread">Conversation</h3>
+        <div class="tk-filters" role="group" aria-label="Filter the conversation">
+          <button type="button" class="on" data-filter="all">All</button><button type="button" data-filter="msg">Messages</button><button type="button" data-filter="note">Notes</button><button type="button" data-filter="event">Activity</button>
+        </div>
+      </div>
+      <div class="tk-stream" id="stream" data-filter="all">
+        {# the original request is the first message #}
+        <div class="it msg in" data-kind="msg"><span class="av cust" aria-hidden="true">{{ ticket.customer.first_name[:1]|upper }}</span>
+          <div class="bub"><div class="who"><b>{{ ticket.customer.first_name }} {{ ticket.customer.last_name }}</b><span>Original request · {{ ticket.created_at|localdt }}</span></div><p>{{ ticket.description }}</p>
+            {% for link in attachments if not link.comment_id and link.attachment %}<a class="att" href="{{ url_for('main.uploaded_file', filename=link.attachment.stored_filename) }}" target="_blank" rel="noopener">📎 {{ link.attachment.filename }}</a>{% endfor %}</div></div>
+        {% set ns = namespace(day=none) %}
+        {% for kind, c, at in convo %}
+          {% set day = at|localdt('%Y-%m-%d') %}
+          {% if day != ns.day %}{% set ns.day = day %}<div class="it day" data-kind="day"><span>{{ 'Today' if day == today_s else 'Yesterday' if day == yesterday_s else at|localdt('%a %d %b %Y') }}</span></div>{% endif %}
+          {% if kind == 'comment' and c.comment_type == 'INTERNAL' %}
+          <div class="it note" data-kind="note"><div class="note-card"><div class="who"><b>{{ m.icon('note', 13) }} Internal note · {{ c.user.name }}</b><time title="{{ c.created_at|localdt }}">{{ c.created_at|localdt('%H:%M') }}</time></div><p>{{ c.body }}</p>
+            {% for link in attachments if link.comment_id==c.id %}{% if link.attachment %}<a class="att" href="{{ url_for('main.uploaded_file', filename=link.attachment.stored_filename) }}" target="_blank" rel="noopener">📎 {{ link.attachment.filename }}</a>{% endif %}{% endfor %}</div></div>
+          {% elif kind == 'comment' and c.comment_type == 'CUSTOMER' %}
+          <div class="it msg in" data-kind="msg"><span class="av cust" aria-hidden="true">{{ ticket.customer.first_name[:1]|upper }}</span><div class="bub"><div class="who"><b>{{ ticket.customer.first_name }}</b><span>Customer reply · {{ c.created_at|localdt('%H:%M') }}</span></div><p>{{ c.body }}</p>
+            {% for link in attachments if link.comment_id==c.id %}{% if link.attachment %}<a class="att" href="{{ url_for('main.uploaded_file', filename=link.attachment.stored_filename) }}" target="_blank" rel="noopener">📎 {{ link.attachment.filename }}</a>{% endif %}{% endfor %}</div></div>
+          {% elif kind == 'comment' %}
+          <div class="it msg out" data-kind="msg"><div class="bub"><div class="who"><b>{{ c.user.name }}</b><span>{{ c.created_at|localdt('%H:%M') }}</span></div><p>{{ c.body }}</p>
+            {% for link in attachments if link.comment_id==c.id %}{% if link.attachment %}<a class="att" href="{{ url_for('main.uploaded_file', filename=link.attachment.stored_filename) }}" target="_blank" rel="noopener">📎 {{ link.attachment.filename }}</a>{% endif %}{% endfor %}</div><span class="av" aria-hidden="true">{{ c.user.name[:1]|upper }}</span></div>
+          {% elif kind == 'contact' %}
+          <div class="it contact" data-kind="contact"><div class="contact-card"><span class="chip chip-purple">{{ m.icon(ch_icon.get(c.channel, 'message'), 16) }}</span><div><b>{{ c.channel }} · {{ c.direction }}{% if c.disposition %} · {{ c.disposition }}{% endif %}</b><em>{{ c.user.name }} · {{ c.interaction_at|localdt('%H:%M') }}</em><p>{{ c.notes }}</p></div></div></div>
+          {% else %}
+          <div class="it event" data-kind="event"><span>{% if c.action_type == 'AUTO_ASSIGNED' %}{{ m.icon('zap', 12) }} Auto-assigned to <b>{{ c.new_value }}</b>{% if c.reason %} · {{ c.reason }}{% endif %}
+            {% elif c.field_name %}{{ m.icon('refresh', 12) }} {{ c.user.name }} changed {{ c.field_name.replace('_id','').replace('_',' ') }}: {{ c.old_value or '—' }} → <b>{{ c.new_value or '—' }}</b>
+            {% else %}{{ m.icon('clock', 12) }} {{ c.user.name }} · {{ c.action_type.replace('_',' ').lower() }}{% if c.new_value %}: {{ c.new_value }}{% endif %}{% endif %}
+            <time>{{ at|localdt('%H:%M') }}</time></span></div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% if current_user.has_permission('ticket.comment') %}
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('main.ticket_comment', ticket_id=ticket.id) }}" class="comment-form composer" id="replyForm">{{ csrf_field() }}
+        <input type="hidden" name="comment_type" id="commentType" value="PUBLIC">
+        <div class="reply-tabs" role="tablist" aria-label="Reply type">
+          <button type="button" role="tab" id="tabPublic" aria-selected="true" data-type="PUBLIC">Reply to customer</button>
+          <button type="button" role="tab" id="tabInternal" aria-selected="false" data-type="INTERNAL">Internal note</button>
+          <button type="button" role="tab" id="tabCustomer" aria-selected="false" data-type="CUSTOMER" title="Record that the customer wrote back. Reopens a resolved or pending ticket.">Customer replied</button>
+          {% if canned %}<select id="cannedSelect" aria-label="Insert canned response"><option value="">Insert canned response…</option>{% for c in canned %}<option value="{{ loop.index0 }}" data-body="{{ c.body }}">{{ c.title }}</option>{% endfor %}</select>{% endif %}
+        </div>
+        <textarea name="body" id="replyBody" aria-label="Message" placeholder="Write a reply… Use @Name to mention a colleague." required rows="2"></textarea>
+        <div class="composer-foot"><label class="attach" title="Attach a file">{{ m.icon('note', 15) }}<input type="file" name="attachment" aria-label="Attachment" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"></label>
+          <span class="hint"><kbd>Ctrl</kbd><kbd>Enter</kbd> to send</span><button class="primary" id="replyBtn">Send reply</button></div>
+      </form>
+      {% endif %}
+    </section>
+
+    <details class="panel audit" id="history">
+      <summary><span><b>Full audit history</b><small>Every change, exactly as recorded</small></span>{{ m.icon('chevron-down', 18) }}</summary>
+      {% for h in history %}<div class="history-row"><b>{{ h.action_type.replace('_',' ') }}</b><span>{% if h.field_name %}{{ h.field_name.replace('_id','').replace('_',' ').title() }}: {{ h.old_value or '—' }} → {{ h.new_value or '—' }}{% endif %}{% if h.reason %}{{ h.reason }}{% endif %}</span><small>{{ h.created_at|localdt }} · {{ h.user.name }}</small></div>
+      {% else %}<div class="empty">No history yet.</div>{% endfor %}
+    </details>
+  </section>
+
+  <aside>
+    {% if ticket.sla_paused_at %}<p class="muted-line">Clock stopped while waiting on the customer. It restarts when the status changes.</p>{% endif %}
+    {% if ticket.first_response_at %}<p class="muted-line">First response {{ ticket.first_response_at|localdt }}{% if ticket.first_response_due_at %} · {{ 'on time' if ticket.first_response_at <= ticket.first_response_due_at else 'late' }}{% endif %}</p>
+    {% elif ticket.first_response_due_at and is_running %}<p class="muted-line">First response due {{ ticket.first_response_due_at|localdt }}{% if ticket.first_response_due_at < now and not ticket.sla_paused_at %} · <b class="late">overdue</b>{% endif %}</p>{% endif %}
+
+    <section class="panel ctx-card">
+      <div class="panel-head"><div><h3>{{ ticket.customer.first_name }} {{ ticket.customer.last_name }}</h3><p>{{ ticket.customer.customer_number }}{% if ticket.customer.company %} · {{ ticket.customer.company }}{% endif %}</p></div></div>
+      <div class="ctx-facts">
+        <div><small>PHONE</small><b>{% for p in ticket.customer.phones %}{{ p.phone_number }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</b></div>
+        <div><small>TICKETS</small><b>{{ ctx.lifetime_tickets }} total{% if ctx.repeat_30d %} · <span class="late">{{ ctx.repeat_30d }} in last 30 days</span>{% endif %}</b></div>
+      </div>
+      {% if ctx.other_open %}<h4 class="subhead">Other open tickets</h4>
+      {% for o in ctx.other_open[:4] %}<a class="ticket-mini" href="{{ url_for('main.ticket_detail', ticket_id=o.id) }}"><span>{{ o.ticket_number }}</span><b>{{ o.subject }}</b><em>{{ o.status.name }}</em></a>{% endfor %}{% endif %}
+      {% if ctx.recent_interactions %}<h4 class="subhead">Last contacts</h4>
+      {% for x in ctx.recent_interactions %}<div class="ctx-line"><b>{{ x.channel }} · {{ x.direction }}</b><span>{{ x.notes|truncate(70) if x.notes else (x.subject or '—') }}</span><small>{{ x.interaction_at|ago }}</small></div>{% endfor %}{% endif %}
+    </section>
+
+    {% if current_user.has_permission('ticket.edit') %}
+    <form method="post" action="{{ url_for('main.ticket_update', ticket_id=ticket.id) }}" class="panel side-form">{{ csrf_field() }}
+      <h3>Ticket control</h3>
+      <label>Status<select name="status_id">{% for s in statuses %}<option value="{{ s.id }}" {% if s.id==ticket.status_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+      <label>Priority<select name="priority_id">{% for p in priorities %}<option value="{{ p.id }}" {% if p.id==ticket.priority_id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></label>
+      <label>Department<select name="department_id"><option value="">Unassigned</option>{% for d in departments %}<option value="{{ d.id }}" {% if d.id==ticket.department_id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></label>
+      <label>Assignee<select name="assigned_user_id"><option value="">Unassigned</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id==ticket.assigned_user_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select></label>
+      <button class="primary full">Save changes</button>
+      {% if is_running %}<button class="secondary full" name="resolve_next" value="1" title="Mark resolved and open your next most urgent ticket">Resolve &amp; next ticket →</button>{% endif %}
+    </form>
+    {% if can_auto_assign and current_user.has_permission('ticket.assign') %}
+    <form method="post" action="{{ url_for('main.ticket_auto_assign', ticket_id=ticket.id) }}" class="auto-assign">{{ csrf_field() }}<button class="secondary full">⚡ Assign to best available agent</button></form>
+    {% endif %}
+    {% endif %}
+
+    {% if current_user.has_permission('interaction.create') %}
+    <form method="post" action="{{ url_for('main.ticket_contact', ticket_id=ticket.id) }}" class="panel side-form">{{ csrf_field() }}
+      <h3>Log a call / message</h3>
+      <div class="two"><label>Channel<select name="channel">{% for ch in channels %}<option>{{ ch }}</option>{% endfor %}</select></label>
+      <label>Direction<select name="direction">{% for d in directions %}<option>{{ d }}</option>{% endfor %}</select></label></div>
+      <label>Outcome<select name="disposition"><option value="">—</option>{% for d in dispositions %}<option>{{ d.name }}</option>{% endfor %}</select></label>
+      <label>What was said<textarea name="notes" required placeholder="Short summary of the conversation."></textarea></label>
+      <button class="secondary full">Log contact</button>
+    </form>
+
+    <section class="panel side-form promise-card">
+      <h3>Promises to pay</h3>
+      {% for p in ctx.promises %}<div class="promise-row {{ p.status|lower }}"><b>{{ p.promised_date.strftime('%d %b') }}{% if p.amount %} · UGX {{ '{:,}'.format(p.amount) }}{% endif %}</b><span class="pill">{{ p.status }}</span>
+        {% if p.status == 'Pending' %}<div class="inline-actions"><form method="post" action="{{ url_for('main.promise_action', pid=p.id, action='kept') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ request.path }}"><button>Kept</button></form><form method="post" action="{{ url_for('main.promise_action', pid=p.id, action='broken') }}">{{ csrf_field() }}<input type="hidden" name="next" value="{{ request.path }}"><button>Broken</button></form></div>{% endif %}</div>{% else %}<p class="muted-line">None recorded.</p>{% endfor %}
+      <form method="post" action="{{ url_for('main.promise_new') }}">{{ csrf_field() }}<input type="hidden" name="customer_id" value="{{ ticket.customer_id }}"><input type="hidden" name="ticket_id" value="{{ ticket.id }}">
+        <div class="two"><label>Date<input type="date" name="promised_date" required></label><label>Amount (UGX)<input name="amount" inputmode="numeric" placeholder="optional"></label></div>
+        <button class="secondary full">Record promise</button>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if current_user.has_permission('ticket.escalate') %}
+    <form method="post" action="{{ url_for('main.escalate', ticket_id=ticket.id) }}" class="panel side-form" id="escalations">{{ csrf_field() }}
+      <h3>Escalate ticket</h3>
+      <label>Receiving department<select name="to_department_id" required><option value="">Choose department</option>{% for d in departments if d.id != ticket.department_id %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></label>
+      <label>Reason *<textarea name="reason" required placeholder="Explain why another department must take this case."></textarea></label>
+      <button class="danger full" data-confirm="Escalate this ticket? It will move to the receiving department.">Escalate</button>
+    </form>
+    {% endif %}
+
+    <div class="panel">
+      <div class="panel-head"><div><h3>Escalation history</h3><p>Department handoffs</p></div></div>
+      {% for e in escalations %}
+      <div class="history-row"><b>{{ e.status }}</b><span>{{ dept_names.get(e.from_department_id, '—') }} → {{ dept_names.get(e.to_department_id, '—') }}: {{ e.reason }}</span><small>{{ e.created_at|localdt }}</small>
+        {% if current_user.has_permission('ticket.escalate') %}
+        {% if e.status=='Pending' %}<div class="inline-actions">
+          <form method="post" action="{{ url_for('main.escalation_action', eid=e.id, action='accept') }}">{{ csrf_field() }}<button>Accept</button></form>
+          <form method="post" action="{{ url_for('main.escalation_action', eid=e.id, action='return') }}">{{ csrf_field() }}<button data-confirm="Return this ticket to the department that escalated it?">Return</button></form></div>{% endif %}
+        {% if e.status=='Accepted' %}<form method="post" action="{{ url_for('main.escalation_action', eid=e.id, action='resolve') }}" style="margin-top:8px">{{ csrf_field() }}<button class="secondary">Mark resolved</button></form>{% endif %}
+        {% endif %}
+      </div>
+      {% else %}<div class="empty">No escalations.</div>{% endfor %}
+    </div>
+  </aside>
+</div>
+{% endblock %}

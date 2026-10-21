@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Edit user — {{ company_name }}{% endblock %}
+{% block heading %}Edit user{% endblock %}
+{% block content %}
+<form method="post" class="panel form-panel">{{ csrf_field() }}
+  <div class="panel-head"><div><h3>{{ target.name }}</h3><p>{{ target.email }}</p></div></div>
+  <div class="form-grid">
+    <label>Full name<input name="name" value="{{ form.get('name','') }}" required></label>
+    <label>Email<input type="email" name="email" value="{{ form.get('email','') }}" required></label>
+    <label>Role<select name="role_id">{% for r in roles %}<option value="{{ r.id }}" {% if r.id|string==form.get('role_id','')|string %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></label>
+    <label>Reset password (optional)<input type="password" name="password" minlength="8" autocomplete="new-password" placeholder="Leave blank to keep the current password"></label>
+    <label>Team<select name="team_id"><option value="">No team</option>{% for t in teams %}<option value="{{ t.id }}" {% if target and target.team and target.team.id == t.id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></label>
+    <label>Ticket capacity<input type="number" name="capacity" min="1" max="500" value="{{ form.get('capacity', 15) }}" title="Most active tickets this person should hold. Auto-assign skips them once they reach it."></label>
+    <fieldset class="full-field"><legend>Departments</legend>
+      <div class="check-grid">{% for d in departments %}<label class="check-label"><input type="checkbox" name="department_ids" value="{{ d.id }}" {% if d.id in selected %}checked{% endif %}> {{ d.name }}{% if not d.is_active %} (inactive){% endif %}</label>{% endfor %}</div>
+    </fieldset>
+    <fieldset class="full-field"><legend>Handles these needs (ticket categories)</legend>
+      <div class="check-grid">{% for c in categories %}<label class="check-label"><input type="checkbox" name="skill_ids" value="{{ c.id }}" {% if c.id in skill_ids %}checked{% endif %}> {{ c.name }}</label>{% endfor %}</div>
+      <p class="muted-line">Auto-assign sends a ticket to agents who handle its category first. Leave all unticked for a generalist who takes anything in their departments.</p>
+    </fieldset>
+    <label class="check-label full-field"><input type="checkbox" name="is_active" {% if form.get('is_active') %}checked{% endif %}> Account is active (inactive users cannot sign in)</label>
+  </div>
+  <div class="actions"><a class="secondary" href="{{ url_for('main.settings', tab='users') }}">Cancel</a><button class="primary">Save changes</button></div>
+</form>
+{% endblock %}

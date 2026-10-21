@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% block title %}Administration — {{ company_name }}{% endblock %}
+{% block heading %}Administration{% endblock %}
+{% block content %}
+{% import '_macros.html' as m with context %}
+<nav class="tabs" aria-label="Administration sections">
+  {% for key, label in tabs %}<a class="{{ 'active' if tab==key else '' }}" {% if tab==key %}aria-current="page"{% endif %} href="{{ url_for('main.settings', tab=key) }}">{{ label }}</a>{% endfor %}
+</nav>
+
+{% if tab == 'users' %}
+<div class="grid-2">
+  <section class="panel">
+    <div class="panel-head"><div><h3>Add user</h3><p>Create a user with a temporary password (min. 8 characters).</p></div></div>
+    <form method="post" action="{{ url_for('main.settings_user') }}" class="stack-form">{{ csrf_field() }}
+      <label>Full name<input name="name" required></label>
+      <label>Email<input type="email" name="email" required></label>
+      <label>Temporary password<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Role<select name="role_id">{% for r in roles %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}</select></label>
+      <label>Department<select name="department_id"><option value="">None</option>{% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></label>
+      <button class="primary">Create user</button>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Roles</h3><p>What each role can do</p></div></div>
+    {% for r in roles %}<div class="list-row"><span><b>{{ r.name }}</b><small>{{ r.permissions|length }} permissions · {{ r.users|length }} user{{ '' if r.users|length==1 else 's' }}</small></span></div>{% endfor %}
+  </section>
+</div>
+<section class="panel" style="margin-top:16px">
+  <div class="panel-head"><div><h3>All users</h3><p>Select a user to edit their role, departments, status or reset their password.</p></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Departments</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Edit</span></th></tr></thead>
+    <tbody>{% for u in users %}<tr>
+      <td><b>{{ u.name }}</b><small>{{ u.email }}</small></td>
+      <td>{{ u.roles[0].name if u.roles else 'No role' }}</td>
+      <td>{{ u.departments|map(attribute='name')|join(', ') or 'None' }}</td>
+      <td>{{ m.pill('Active' if u.is_active else 'Inactive', '#22c55e' if u.is_active else '#94a3b8') }}</td>
+      <td><a class="secondary" href="{{ url_for('main.user_edit', uid=u.id) }}">Edit</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+{% elif tab == 'structure' %}
+<div class="grid-2">
+  <section class="panel">
+    <div class="panel-head"><div><h3>Departments</h3><p>Inactive departments are hidden from pickers but keep their history.</p></div></div>
+    {% for d in departments %}
+    <form method="post" action="{{ url_for('main.settings_department') }}" class="inline-edit">{{ csrf_field() }}<input type="hidden" name="id" value="{{ d.id }}">
+      <input name="name" value="{{ d.name }}" required aria-label="Department name"><input name="description" value="{{ d.description or '' }}" placeholder="Description" aria-label="Description"><input type="number" min="1" name="capacity" value="{{ d.capacity or '' }}" placeholder="Capacity" aria-label="Capacity (max active tickets)" title="Max active tickets — shown on the dashboard workload card">
+      <label class="check-label"><input type="checkbox" name="is_active" {% if d.is_active %}checked{% endif %}> Active</label><button class="secondary">Save</button>
+    </form>{% endfor %}
+    <form method="post" action="{{ url_for('main.settings_department') }}" class="inline-edit add">{{ csrf_field() }}
+      <input name="name" placeholder="New department" required aria-label="New department name"><input name="description" placeholder="Description" aria-label="Description"><input type="number" min="1" name="capacity" placeholder="Capacity" aria-label="Capacity"><button class="primary">Add</button>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Categories</h3><p>Used to classify tickets.</p></div></div>
+    {% for c in categories %}
+    <form method="post" action="{{ url_for('main.settings_category') }}" class="inline-edit">{{ csrf_field() }}<input type="hidden" name="id" value="{{ c.id }}">
+      <input name="name" value="{{ c.name }}" required aria-label="Category name">
+      <select name="department_id" aria-label="Department"><option value="">Any department</option>{% for d in departments %}<option value="{{ d.id }}" {% if d.id==c.department_id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select>
+      <label class="check-label"><input type="checkbox" name="is_active" {% if c.is_active %}checked{% endif %}> Active</label><button class="secondary">Save</button>
+    </form>{% endfor %}
+    <form method="post" action="{{ url_for('main.settings_category') }}" class="inline-edit add">{{ csrf_field() }}
+      <input name="name" placeholder="New category" required aria-label="New category name">
+      <select name="department_id" aria-label="Department"><option value="">Any department</option>{% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select><span></span><button class="primary">Add</button>
+    </form>
+  </section>
+</div>
+
+{% elif tab == 'sla' %}
+<section class="panel">
+  <div class="panel-head"><div><h3>SLA targets</h3><p>Targets are in minutes. With “business hours only” ticked, the clock runs only during the hours and days set in the Business hours tab, and stops while a ticket is Pending (waiting on the customer).</p></div></div>
+  <form method="post" action="{{ url_for('main.settings_sla') }}">{{ csrf_field() }}
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Priority</th><th scope="col">First response (min)</th><th scope="col">Resolution (min)</th><th scope="col">Business hours only</th><th scope="col">Enforced</th></tr></thead>
+      <tbody>{% for p, s in rows %}<tr>
+        <td>{{ m.pill(p.name, p.color) }}</td>
+        <td><input type="number" min="1" name="first_{{ p.id }}" value="{{ s.first_response_minutes if s else 60 }}" required aria-label="{{ p.name }} first response minutes"></td>
+        <td><input type="number" min="1" name="resolution_{{ p.id }}" value="{{ s.resolution_minutes if s else 1440 }}" required aria-label="{{ p.name }} resolution minutes"></td>
+        <td><label class="check-label"><input type="checkbox" name="bh_{{ p.id }}" {% if not s or s.business_hours_only %}checked{% endif %}> Yes</label></td>
+        <td><label class="check-label"><input type="checkbox" name="active_{{ p.id }}" {% if not s or s.active %}checked{% endif %}> Active</label></td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    <div class="actions"><button class="primary">Save SLA targets</button></div>
+  </form>
+</section>
+
+{% elif tab == 'teams' %}
+<section class="panel">
+  <div class="panel-head"><div><h3>Teams</h3><p>Each team has a lead and the agents they supervise. Team leads see only their own team in Coaching. Put people in a team from their user page, or import them.</p></div></div>
+  {% for t in teams %}
+  <form method="post" action="{{ url_for('main.settings_team') }}" class="inline-edit">{{ csrf_field() }}<input type="hidden" name="id" value="{{ t.id }}">
+    <input name="name" value="{{ t.name }}" required maxlength="100" aria-label="Team name">
+    <select name="lead_id" aria-label="Team lead"><option value="">No lead</option>{% for u in leaders %}<option value="{{ u.id }}" {% if t.lead_id == u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+    <span class="muted-line">{{ t.members|length }} member{{ '' if t.members|length == 1 else 's' }}</span>
+    <button class="secondary">Save</button>
+    <button class="secondary" formaction="{{ url_for('main.settings_team_delete', tid=t.id) }}" data-confirm="Remove the team “{{ t.name }}”? Its people are kept, but no longer belong to a team.">Remove</button>
+  </form>
+  {% else %}<div class="empty">No teams yet.</div>{% endfor %}
+  <form method="post" action="{{ url_for('main.settings_team') }}" class="inline-edit add">{{ csrf_field() }}
+    <input name="name" placeholder="New team name" required maxlength="100" aria-label="New team name">
+    <select name="lead_id" aria-label="Team lead"><option value="">No lead yet</option>{% for u in leaders %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>
+    <span></span><button class="primary">Add team</button>
+  </form>
+</section>
+
+{% elif tab == 'hours' %}
+<div class="grid-2">
+  <section class="panel">
+    <div class="panel-head"><div><h3>Business hours</h3><p>Local time ({{ config.get('DISPLAY_TZ') }}). Used by every SLA rule that is set to “business hours only”.</p></div></div>
+    <form method="post" action="{{ url_for('main.settings_hours') }}">{{ csrf_field() }}
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Day</th><th scope="col">Open</th><th scope="col">From</th><th scope="col">To</th></tr></thead>
+        <tbody>{% for i, name, h in days %}<tr>
+          <td>{{ name }}</td>
+          <td><label class="check-label"><input type="checkbox" name="work_{{ i }}" {% if h and h.is_working_day %}checked{% endif %}> Working day</label></td>
+          <td><input type="time" name="start_{{ i }}" value="{{ h.start_time if h else '08:00' }}" aria-label="{{ name }} opening time" required></td>
+          <td><input type="time" name="end_{{ i }}" value="{{ h.end_time if h else '17:00' }}" aria-label="{{ name }} closing time" required></td>
+        </tr>{% endfor %}</tbody>
+      </table></div>
+      <div class="actions"><button class="primary">Save business hours</button></div>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Holidays</h3><p>No SLA time passes on these days.</p></div></div>
+    {% for h in holidays %}<form method="post" action="{{ url_for('main.settings_holiday_delete', hid=h.id) }}" class="list-row">{{ csrf_field() }}<span><b>{{ h.name }}</b><small>{{ h.date.strftime('%a %d %b %Y') }}</small></span><button class="secondary" data-confirm="Remove this holiday?">Remove</button></form>{% else %}<div class="empty">No holidays added yet.</div>{% endfor %}
+    <form method="post" action="{{ url_for('main.settings_holiday') }}" class="inline-edit add">{{ csrf_field() }}<input name="name" placeholder="Holiday name" required aria-label="Holiday name"><input type="date" name="date" required aria-label="Date"><span></span><button class="primary">Add</button></form>
+    <form method="post" action="{{ url_for('main.settings_holiday_preset') }}" class="inline-edit add" style="margin-top:12px">{{ csrf_field() }}<input type="number" name="year" min="2000" max="2100" placeholder="Year e.g. 2026" aria-label="Year" required><span class="muted-line" style="grid-column:span 2">Adds Uganda’s fixed-date public holidays. Easter and Eid move each year — add those by hand.</span><button class="secondary">Add</button></form>
+  </section>
+</div>
+
+{% elif tab == 'data' %}
+<div class="grid-2">
+  <section class="panel">
+    <div class="panel-head"><div><h3>Backup</h3><p>A single zip with the database and every uploaded file. Keep copies somewhere safe, away from this computer.</p></div></div>
+    <form method="post" action="{{ url_for('main.backup_download') }}">{{ csrf_field() }}<button class="primary">⬇ Download backup now</button></form>
+    <p class="muted-line" style="margin-top:12px">To restore: stop BaiDesk, put <code>baidesk.db</code> from the zip into the <code>instance</code> folder (replacing the old one), copy the <code>uploads</code> folder back, and start BaiDesk again.</p>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Import from CSV</h3><p>Move customers and tickets over from a spreadsheet. Tick “validate only” first to see problems without saving anything.</p></div></div>
+    {% for kind, title in [('users','Staff accounts'),('customers','Customers'),('tickets','Tickets')] %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('main.import_csv', kind=kind) }}" class="stack-form" style="margin-bottom:18px">{{ csrf_field() }}
+      <h3 class="subhead">{{ title }} <a class="link-more" href="{{ url_for('main.import_template', kind=kind) }}">template</a></h3>
+      <input type="file" name="file" accept=".csv,text/csv" required aria-label="{{ title }} CSV file">
+      <label class="check-label"><input type="checkbox" name="validate_only" checked> Validate only (don’t save)</label>
+      <button class="secondary">Check / import {{ title|lower }}</button>
+    </form>{% endfor %}
+  </section>
+</div>
+
+{% elif tab == 'canned' %}
+<section class="panel">
+  <div class="panel-head"><div><h3>Canned responses</h3><p>Agents can insert these into replies from the ticket page.</p></div></div>
+  {% for c in canned %}
+  <div class="canned-row">
+    <form method="post" action="{{ url_for('main.settings_canned') }}" class="stack-form">{{ csrf_field() }}<input type="hidden" name="id" value="{{ c.id }}">
+      <input name="title" value="{{ c.title }}" required aria-label="Title"><textarea name="body" rows="3" required aria-label="Message">{{ c.body }}</textarea>
+      <div class="actions" style="margin:0;justify-content:space-between"><label class="check-label"><input type="checkbox" name="is_active" {% if c.is_active %}checked{% endif %}> Active</label><button class="secondary">Save</button></div>
+    </form>
+    <form method="post" action="{{ url_for('main.settings_canned_delete', cid=c.id) }}">{{ csrf_field() }}<button class="ghost" data-confirm="Delete this canned response?">Delete</button></form>
+  </div>{% endfor %}
+  <h3 class="subhead">Add a response</h3>
+  <form method="post" action="{{ url_for('main.settings_canned') }}" class="stack-form">{{ csrf_field() }}
+    <input name="title" placeholder="Title" required aria-label="Title"><textarea name="body" rows="3" placeholder="Message" required aria-label="Message"></textarea><button class="primary">Add response</button>
+  </form>
+</section>
+
+{% elif tab == 'general' %}
+<section class="panel form-panel">
+  <div class="panel-head"><div><h3>General</h3><p>Shown in the sidebar and page headers.</p></div></div>
+  <form method="post" action="{{ url_for('main.settings_general') }}" class="stack-form">{{ csrf_field() }}
+    <label>Company name<input name="company_name" value="{{ company }}" required maxlength="60"></label>
+    <label>Tagline (shown on the sign-in page)<input name="tagline" maxlength="80" value="{{ brand.tagline }}" placeholder="e.g. Service Beyond Expectations"></label>
+    <fieldset class="accent-picker"><legend>Brand colour</legend>
+      <div class="swatches" role="radiogroup" aria-label="Brand colour">{% for label, hex in accent_presets %}<label class="swatch" title="{{ label }}"><input type="radio" name="accent" value="{{ hex }}" {% if accent == hex %}checked{% endif %}><span style="--sw:{{ hex }}"></span><em>{{ label }}</em></label>{% endfor %}</div>
+      <label class="inline-field">Or a custom colour <input name="accent_custom" placeholder="#0f766e" maxlength="7" value="{{ accent if accent not in (accent_presets|map(attribute=1)|list) else '' }}" pattern="#?[0-9a-fA-F]{6}"></label>
+      <p class="muted-line">Used for buttons, links and the active menu item, in light and dark mode. Colours too pale for white text are rejected so everything stays readable.</p>
+    </fieldset>
+    <label class="check-label"><input type="checkbox" name="auto_assign" {% if auto_assign %}checked{% endif %}> Assign tickets automatically to an available agent in the right department, matched on the ticket’s category and each agent’s load and capacity — and keep handing out waiting tickets as agents free up</label>
+    <p class="muted-line">Times are displayed in <b>{{ config.get('DISPLAY_TZ') }}</b>. Change it with the <code>DISPLAY_TZ</code> environment variable.</p>
+    <button class="primary">Save</button>
+  </form>
+</section>
+
+
+<section class="panel form-panel brand-panel">
+  <div class="panel-head"><div><h3>Brand identity</h3><p>The logo shown in the menu, on the sign-in page and in the browser tab.</p></div></div>
+  <div class="brand-preview">
+    <div class="brand-preview-tile">{{ m.brand_mark() }}<div><b>{{ brand.first }}</b><small>{{ brand.rest or 'Customer Support CRM' }}</small></div></div>
+    <form method="post" action="{{ url_for('main.branding_apply_bolga') }}">{{ csrf_field() }}<button class="primary">Apply Bolga Communications branding</button><p class="muted-line">Sets the name, tagline “Service Beyond Expectations”, brand blue and the Bolga logo mark in one click.</p></form>
+  </div>
+  <form method="post" action="{{ url_for('main.branding_mark') }}" class="stack-form" style="margin-top:18px">{{ csrf_field() }}
+    <fieldset class="accent-picker"><legend>Logo style</legend>
+      <label class="check-label"><input type="radio" name="mark" value="letter" {% if brand.mark == 'letter' %}checked{% endif %}> First letter of the company name</label>
+      <label class="check-label"><input type="radio" name="mark" value="bolga" {% if brand.mark == 'bolga' %}checked{% endif %}> Bolga Communications mark</label>
+      <label class="check-label"><input type="radio" name="mark" value="custom" {% if brand.mark == 'custom' %}checked{% endif %}> My uploaded logo</label>
+    </fieldset>
+    <button class="secondary">Save logo style</button>
+  </form>
+  <form method="post" action="{{ url_for('main.branding_logo_upload') }}" enctype="multipart/form-data" class="stack-form" style="margin-top:18px">{{ csrf_field() }}
+    <h3 class="subhead" style="margin:0">Upload your own logo</h3>
+    <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" required aria-label="Logo file">
+    <label class="check-label"><input type="checkbox" name="logo_tile" value="accent" {% if brand.tile == 'accent' %}checked{% endif %}> My logo is white or light — show it on a brand-coloured tile</label>
+    <p class="muted-line">PNG, JPG, WebP or SVG, up to 1 MB. A transparent PNG or SVG works best. If you have the official artwork from your designer, upload it here to replace the built-in mark.</p>
+    <div class="actions" style="justify-content:flex-start"><button class="secondary">Upload logo</button></div>
+  </form>
+  {% if brand.mark == 'custom' or brand.logo_url %}<form method="post" action="{{ url_for('main.branding_logo_remove') }}">{{ csrf_field() }}<button class="ghost" data-confirm="Remove the uploaded logo?">Remove uploaded logo</button></form>{% endif %}
+</section>
+{% elif tab == 'audit' %}
+<section class="panel">
+  <div class="panel-head"><div><h3>Audit log</h3><p>Sign-ins, exports and administrative changes.</p></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">When</th><th scope="col">User</th><th scope="col">Action</th><th scope="col">Entity</th><th scope="col">Details</th><th scope="col">IP</th></tr></thead>
+    <tbody>{% for a in page.items %}<tr>
+      <td>{{ a.created_at|localdt }}</td><td>{{ names.get(a.user_id, 'System') }}</td><td><b>{{ a.action.replace('_',' ') }}</b></td>
+      <td>{{ a.entity_type or '—' }}{% if a.entity_id %} #{{ a.entity_id }}{% endif %}</td><td>{{ a.details or '—' }}</td><td>{{ a.ip_address or '—' }}</td>
+    </tr>{% else %}<tr><td colspan="6" class="empty">No audit entries yet.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {{ m.pager(page) }}
+</section>
+{% endif %}
+{% endblock %}

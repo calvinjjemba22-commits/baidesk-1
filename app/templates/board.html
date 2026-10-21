@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}Queue board — {{ company_name }}{% endblock %}
+{% block heading %}Queue board{% endblock %}
+{% block subheading %}<p class="sub">Who can take work, who is stretched, and what is waiting. {% if can_assign %}Drag a ticket onto an agent to assign it.{% endif %}</p><span class="live-chip" id="boardLive" hidden><i></i><span>Live · updated <b id="boardAgo">just now</b></span></span>{% endblock %}
+
+{% block content %}
+{% import '_macros.html' as m with context %}
+<form id="csrfHolder" hidden>{{ csrf_field() }}</form>
+<div id="boardRoot" data-can-assign="{{ 1 if can_assign else 0 }}">
+  <section class="bd-stats" aria-label="Team status">
+    <div><b>{{ stats.available }}</b><span>Available</span><small>{{ stats.free_slots }} open slots</small></div>
+    <div><b>{{ stats.full }}</b><span>At capacity</span></div>
+    <div><b>{{ stats.away }}</b><span>Away</span></div>
+    <div class="{{ 'bad' if waiting_total else '' }}"><b>{{ waiting_total }}</b><span>Waiting</span><small>longest {{ stats.longest_wait }}</small></div>
+    <div class="{{ 'bad' if stats.late else '' }}"><b>{{ stats.late }}</b><span>Past deadline</span></div>
+    <div><b>{{ stats.avg_first_response }}</b><span>First reply (last hour)</span></div>
+  </section>
+
+  <div class="bd-layout">
+    <section class="panel bd-queue" aria-labelledby="bdqTitle">
+      <div class="panel-head"><div><h3 id="bdqTitle">Waiting to be assigned</h3><p>{{ waiting_total }} ticket{{ '' if waiting_total == 1 else 's' }} · most urgent first</p></div></div>
+      {% for q in queue %}{% set t = q.t %}
+      <article class="bq-card" {% if can_assign %}draggable="true"{% endif %} data-ticket="{{ t.id }}" aria-label="{{ t.ticket_number }}">
+        <div class="bq-top">{% if can_assign %}<span class="grip" aria-hidden="true">{{ m.icon('grip', 14) }}</span>{% endif %}<span class="prio prio-{{ t.priority.slug }}">{{ t.priority.name }}</span><b>{{ t.ticket_number }}</b><span class="sla-pill sla-{{ q.tone }}">{{ q.label }}</span></div>
+        <a class="bq-subj" href="{{ url_for('main.ticket_detail', ticket_id=t.id) }}">{{ t.subject|truncate(70) }}</a>
+        <div class="bq-meta"><span>{{ t.customer.first_name }} {{ t.customer.last_name }}</span>{% if t.department %}<span>{{ t.department.name }}</span>{% endif %}<span class="waited" title="Time in the queue">{{ m.icon('clock', 12) }} {{ q.waited }}</span></div>
+        {% if can_assign %}<div class="bq-actions">
+          <form method="post" action="{{ url_for('main.ticket_auto_assign', ticket_id=t.id) }}">{{ csrf_field() }}<button class="secondary">{{ m.icon('zap', 14) }} Best agent</button></form>
+          <button type="button" class="ghost" data-peek="{{ t.id }}" aria-label="Preview {{ t.ticket_number }}">{{ m.icon('eye', 15) }}</button>
+        </div>{% endif %}
+      </article>
+      {% else %}{{ m.empty('check-circle', 'Queue is clear', 'Every active ticket has an owner.') }}{% endfor %}
+      {% if waiting_total > queue|length %}<p class="muted-line">Showing the {{ queue|length }} most urgent of {{ waiting_total }}.</p>{% endif %}
+    </section>
+
+    <section class="bd-agents" aria-label="Agents">
+      {% for c in cards %}{% set u = c.u %}
+      <article class="ag-card state-{{ c.state }}" data-agent="{{ u.id }}" aria-label="{{ u.name }}">
+        <header>
+          <span class="avatar small" aria-hidden="true">{{ u.name[:1]|upper }}</span>
+          <div><b>{{ u.name }}</b><small>{{ {'ok':'Available','full':'At capacity','away':'Away'}[c.state] }}{% if u.team %} · {{ u.team.name }}{% endif %}</small></div>
+          <span class="state-dot" aria-hidden="true"></span>
+        </header>
+        <div class="ag-load"><div class="ag-bar"><i class="{{ 'over' if c.over else 'full' if c.state == 'full' else '' }}" style="width:{{ c.pct }}%"></i></div><b>{{ c.load }}<small> / {{ c.cap }}</small></b></div>
+        <div class="ag-badges">{% if c.late %}<span class="sla-pill sla-red">{{ c.late }} late</span>{% endif %}{% if c.risk %}<span class="sla-pill sla-amber">{{ c.risk }} at risk</span>{% endif %}{% if c.paused %}<span class="sla-pill sla-muted">{{ c.paused }} paused</span>{% endif %}{% if not (c.late or c.risk or c.paused) %}<span class="muted-line">{{ 'On track' if c.load else 'No tickets' }}</span>{% endif %}</div>
+        {% for x in c.top %}<button type="button" class="ag-ticket" data-peek="{{ x.t.id }}"><span class="prio prio-{{ x.t.priority.slug }}"></span><b>{{ x.t.ticket_number }}</b><em>{{ x.t.subject|truncate(26) }}</em><span class="sla-pill sla-{{ x.tone }}">{{ x.label }}</span></button>{% endfor %}
+      </article>
+      {% else %}<div class="panel">{{ m.empty('users', 'No agents to show', 'Add agents under Administration → Users, or assign them to your team.') }}</div>{% endfor %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/board.js') }}"></script>{% endblock %}

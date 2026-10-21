@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Edit {{ ticket.ticket_number }} — {{ company_name }}{% endblock %}
+{% block heading %}Edit {{ ticket.ticket_number }}{% endblock %}
+{% block content %}
+<form method="post" class="panel form-panel">{{ csrf_field() }}
+  <div class="panel-head"><div><h3>Ticket details</h3><p>Status, priority, department and assignee are changed from the ticket page. Edits here are recorded in the history.</p></div></div>
+  <div class="form-grid">
+    <label class="full-field">Subject *<input name="subject" required value="{{ form.get('subject','') }}"></label>
+    <label>Category<select name="category_id"><option value="">None</option>{% for c in categories %}<option value="{{ c.id }}" {% if c.id|string==form.get('category_id','') %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></label>
+    <label class="full-field">Description *<textarea name="description" rows="9" required>{{ form.get('description','') }}</textarea></label>
+  </div>
+  <div class="actions"><a class="secondary" href="{{ url_for('main.ticket_detail', ticket_id=ticket.id) }}">Cancel</a><button class="primary">Save changes</button></div>
+</form>
+{% endblock %}
